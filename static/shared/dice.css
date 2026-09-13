@@ -1,0 +1,59 @@
+/* 3Dサイコロ。PC画面とスマホで同じものを使う。
+ *
+ * 大きさは --die 変数だけで決まる。読み込む側で
+ *   .stage { --die: 104px }
+ * のように指定する。
+ *
+ * 注意: .cube に filter / opacity / overflow を足さないこと。
+ * これらは transform-style: preserve-3d を無効化し、立方体が潰れて消える。
+ */
+
+.stage {
+  --die: 80px;
+  perspective: calc(var(--die) * 5.4);
+  height: calc(var(--die) * 1.45);
+  display: grid;
+  place-items: center;
+}
+
+.cube {
+  position: relative;
+  width: var(--die);
+  height: var(--die);
+  transform-style: preserve-3d;
+  transform: rotateX(-14deg) rotateY(22deg);
+}
+
+.cube.shake { animation: die-shake .12s linear infinite; }
+@keyframes die-shake { 0%, 100% { margin-left: -3px } 50% { margin-left: 3px } }
+
+.face {
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--die) * .12);
+  background: linear-gradient(145deg, #fdfdfd, #dfe3ea);
+  border: 1px solid #c3c9d4;
+  box-shadow: 0 10px 22px -6px rgba(0, 0, 0, .6);
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: calc(var(--die) * .11);
+  gap: calc(var(--die) * .04);
+  backface-visibility: hidden;
+}
+
+.pip {
+  width: calc(var(--die) * .16);
+  height: calc(var(--die) * .16);
+  border-radius: 50%;
+  background: #1b1e26;
+  place-self: center;
+}
+.pip.hide { visibility: hidden; }
+
+/* 6面の配置。1の裏が6、2の裏が5、3の裏が4。 */
+.f1 { transform: rotateY(0deg)    translateZ(calc(var(--die) / 2)); }
+.f6 { transform: rotateY(180deg)  translateZ(calc(var(--die) / 2)); }
+.f3 { transform: rotateY(90deg)   translateZ(calc(var(--die) / 2)); }
+.f4 { transform: rotateY(-90deg)  translateZ(calc(var(--die) / 2)); }
+.f2 { transform: rotateX(90deg)   translateZ(calc(var(--die) / 2)); }
+.f5 { transform: rotateX(-90deg)  translateZ(calc(var(--die) / 2)); }

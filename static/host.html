@@ -3,46 +3,98 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>親機 — 接続テスト</title>
+<title>すごろく — 親機</title>
+<link rel="stylesheet" href="/static/shared/dice.css">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body {
-    margin: 0; min-height: 100vh; background: #0f1117; color: #eef0f5;
+    margin: 0; height: 100vh; overflow: hidden; background: #0f1117; color: #eef0f5;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Yu Gothic UI", sans-serif;
     display: flex; flex-direction: column;
   }
-  header {
-    display: flex; align-items: center; gap: 28px; padding: 24px 36px;
-    border-bottom: 1px solid #22262f;
-  }
-  #qr { width: 128px; height: 128px; background: #fff; border-radius: 12px; padding: 8px; flex: none; }
-  .lead { font-size: 14px; color: #8b93a7; letter-spacing: .08em; }
-  #url { font-size: 30px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
-  #conn { margin-left: auto; font-size: 14px; display: flex; align-items: center; gap: 9px; color: #8b93a7; }
+
+  header { display: flex; align-items: center; gap: 24px; padding: 14px 28px; border-bottom: 1px solid #22262f; flex: none; }
+  #qr { width: 88px; height: 88px; background: #fff; border-radius: 10px; padding: 6px; flex: none; }
+  .lead { font-size: 13px; color: #8b93a7; letter-spacing: .08em; }
+  #url { font-size: 25px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  #right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  #conn { display: flex; align-items: center; gap: 9px; font-size: 13px; color: #8b93a7; }
   #dot { width: 9px; height: 9px; border-radius: 50%; background: #f87171; }
   #dot.on { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
-
-  main { flex: 1; padding: 36px; }
-  #empty { color: #5c6478; font-size: 17px; text-align: center; margin-top: 80px; }
-  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px; }
-
-  .card {
-    border: 2px solid var(--c); border-radius: 16px; padding: 20px;
-    background: color-mix(in srgb, var(--c) 9%, #171a22);
-    transition: transform .12s ease, box-shadow .25s ease;
+  #mute {
+    background: none; border: 1px solid #3a4050; color: #8b93a7; border-radius: 9px;
+    font-size: 18px; padding: 7px 11px; cursor: pointer; line-height: 1; font-family: inherit;
   }
-  .card.hit { transform: scale(1.06); box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 45%, transparent); }
-  .card .nm { font-size: 21px; font-weight: 700; color: var(--c); }
-  .card .ct { font-size: 42px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 8px; }
-  .card .lb { font-size: 12px; color: #8b93a7; letter-spacing: .1em; }
+  #mute:hover { border-color: #5c6478; }
 
-  #log {
-    border-top: 1px solid #22262f; padding: 14px 36px; font-size: 13px;
-    color: #6b7385; font-family: ui-monospace, Consolas, monospace;
-    height: 108px; overflow-y: auto;
+  main { flex: 1; display: grid; grid-template-columns: 1fr 300px; gap: 22px; padding: 22px 28px; min-height: 0; }
+
+  /* ---- 盤面 ---- */
+  #board { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; align-content: start; }
+  .sq {
+    position: relative; border-radius: 10px; padding: 6px; min-height: 90px;
+    background: #171a22; border: 1px solid #262a35; display: flex; flex-direction: column;
+    transition: box-shadow .15s, border-color .15s;
   }
-  #log div { padding: 2px 0; }
+  .sq .no { font-size: 11px; color: #5c6478; font-variant-numeric: tabular-nums; }
+  .sq .lb { font-size: 10px; line-height: 1.3; margin-top: 2px; font-weight: 600; }
+  .sq .tokens { margin-top: auto; display: flex; flex-wrap: wrap; gap: 3px; }
+  .tk {
+    width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 11px; font-weight: 800; color: #0f1117; background: var(--c);
+    box-shadow: 0 0 0 2px #0f1117;
+  }
+  .tk.rest { opacity: .4; }
+  .tk.hop { animation: hop .18s ease; }
+  @keyframes hop { 0% { transform: translateY(0) scale(1) } 50% { transform: translateY(-9px) scale(1.15) } 100% { transform: translateY(0) scale(1) } }
+
+  .sq.start   { background: #10202b; border-color: #1d4a63; }
+  .sq.goal    { background: #2b2413; border-color: #6b5a20; }
+  .sq.goal .lb, .sq.start .lb { color: #ffd54f; }
+  .sq.forward { background: #12241a; border-color: #2c5f3f; }
+  .sq.forward .lb { color: #81c784; }
+  .sq.back    { background: #2a1618; border-color: #6b2f33; }
+  .sq.back .lb { color: #ff8a90; }
+  .sq.rest    { background: #241f14; border-color: #6b5a20; }
+  .sq.rest .lb { color: #ffd54f; }
+  .sq.here    { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.3); }
+  .sq.flash   { border-color: var(--fc, #fff); box-shadow: 0 0 22px -2px var(--fc, #fff); }
+
+  /* ---- 右側 ---- */
+  aside { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+
+  #turn { font-size: 14px; text-align: center; padding: 10px; border-radius: 10px; background: #171a22; border: 1px solid #262a35; flex: none; }
+  #turn b { font-size: 17px; color: var(--c, #eef0f5); }
+
+  #dice { border: 1px solid #262a35; border-radius: 14px; padding: 14px; text-align: center; background: #171a22; flex: none; }
+  #dice .stage { --die: 104px; }
+  #who { font-size: 15px; font-weight: 700; color: var(--c, #5c6478); min-height: 1.3em; }
+  #mv { font-size: 15px; font-weight: 600; color: #8b93a7; font-variant-numeric: tabular-nums; min-height: 1.3em; }
+  #ef { font-size: 14px; font-weight: 700; min-height: 1.3em; }
+  #ef.fw { color: #81c784; } #ef.bk { color: #ff8a90; } #ef.rs { color: #ffd54f; } #ef.gl { color: #ffd54f; }
+
+  #list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; }
+  .row {
+    display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+    border-radius: 10px; border: 1px solid #262a35; background: #171a22;
+  }
+  .row.now { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, #171a22); }
+  .row .nm { font-weight: 700; color: var(--c); font-size: 14px; }
+  .row .st { margin-left: auto; font-size: 12px; color: #8b93a7; font-variant-numeric: tabular-nums; }
+  .row .kick {
+    border: 1px solid #3a4050; background: none; color: #8b93a7; border-radius: 7px;
+    font-size: 11px; padding: 4px 8px; cursor: pointer; font-family: inherit;
+  }
+  .row .kick:hover { background: #f87171; border-color: #f87171; color: #14161c; }
+
+  #ctrl { display: flex; gap: 8px; flex: none; }
+  #ctrl button { flex: 1; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 10px; border: none; cursor: pointer; font-family: inherit; }
+  #start { background: #4dd0e1; color: #06202b; }
+  #start:disabled { background: #262a35; color: #5c6478; cursor: not-allowed; }
+  #reset { background: none; border: 1px solid #3a4050 !important; color: #8b93a7; }
+
+  #empty { color: #5c6478; font-size: 14px; text-align: center; padding: 18px; }
 </style>
 </head>
 <body>
@@ -52,77 +104,226 @@
       <div class="lead">スマホでQRを読むか、ブラウザで次を開く</div>
       <div id="url">…</div>
     </div>
-    <div id="conn"><span id="dot"></span><span id="cs">未接続</span></div>
+    <div id="right">
+      <button id="mute" title="音のオン/オフ">🔊</button>
+      <div id="conn"><span id="dot"></span><span id="cs">未接続</span></div>
+    </div>
   </header>
 
   <main>
-    <div id="empty">参加者を待っています…</div>
-    <div id="grid"></div>
+    <div id="board"></div>
+
+    <aside>
+      <div id="turn">参加者を待っています</div>
+
+      <div id="dice">
+        <div id="who"></div>
+        <div class="stage"><div class="cube" id="cube"></div></div>
+        <div id="mv">サイコロ待ち</div>
+        <div id="ef"></div>
+      </div>
+
+      <div id="list"><div id="empty">まだ誰も参加していません</div></div>
+
+      <div id="ctrl">
+        <button id="start" disabled>ゲーム開始</button>
+        <button id="reset">リセット</button>
+      </div>
+    </aside>
   </main>
 
-  <div id="log"></div>
+<script type="module">
+import { createDice } from "/static/shared/dice.js";
+import * as sound from "/static/shared/sound.js";
+import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
+import { posLabel, moveLabel, rolledLabel, goalLabel, effectStyle, GOAL_CHIME }
+  from "/static/shared/format.js";
 
-<script>
 const $ = (id) => document.getElementById(id);
-const cards = new Map();
-let ws = null;
+const dice = createDice($("cube"));
 
-function log(text) {
-  const el = document.createElement("div");
-  el.textContent = `${new Date().toLocaleTimeString("ja-JP")}  ${text}`;
-  $("log").prepend(el);
-  while ($("log").childElementCount > 60) $("log").lastElementChild.remove();
+/* ---- 音 ---- */
+$("mute").textContent = sound.isMuted() ? "🔇" : "🔊";
+$("mute").onclick = () => { $("mute").textContent = sound.toggleMute() ? "🔇" : "🔊"; };
+["pointerdown", "keydown"].forEach((e) => window.addEventListener(e, () => sound.enable(), { once: true }));
+
+/* ---- 盤面 ---- */
+let ws = null, state = null, shown = new Map(), lastSeq = null, firstState = true, animating = false;
+
+function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
+
+function drawBoard(squares) {
+  $("board").innerHTML = "";
+  squares.forEach((sq, i) => {
+    const el = document.createElement("div");
+    el.className = "sq " + sq.kind;
+    el.id = "sq" + i;
+    el.innerHTML = `<div class="no">${i}</div><div class="lb">${sq.label || ""}</div><div class="tokens"></div>`;
+    $("board").append(el);
+  });
 }
 
-function render(players) {
-  $("empty").style.display = players.length ? "none" : "block";
-  const alive = new Set(players.map((p) => p.id));
-  for (const [id, el] of cards) {
-    if (!alive.has(id)) { el.remove(); cards.delete(id); }
+function drawTokens(hopId) {
+  if (!state) return;
+  document.querySelectorAll(".tokens").forEach((t) => (t.innerHTML = ""));
+  document.querySelectorAll(".sq.here").forEach((e) => e.classList.remove("here"));
+  for (const p of state.players) {
+    const cell = $("sq" + (shown.has(p.id) ? shown.get(p.id) : p.pos));
+    if (!cell) continue;
+    const tk = document.createElement("div");
+    tk.className = "tk" + (p.resting ? " rest" : "") + (p.id === hopId ? " hop" : "");
+    tk.style.setProperty("--c", p.color);
+    tk.textContent = p.name.slice(0, 1);
+    tk.title = p.name;
+    cell.querySelector(".tokens").append(tk);
+    if (p.id === state.turn && !animating) cell.classList.add("here");
   }
-  for (const p of players) {
-    let el = cards.get(p.id);
-    if (!el) {
-      el = document.createElement("div");
-      el.className = "card";
-      el.style.setProperty("--c", p.color);
-      el.innerHTML = `<div class="nm"></div><div class="ct">0</div><div class="lb">TAPS</div>`;
-      $("grid").append(el);
-      cards.set(p.id, el);
+}
+
+function flashSquare(pos, color) {
+  const cell = $("sq" + pos);
+  if (!cell) return;
+  cell.style.setProperty("--fc", color);
+  cell.classList.add("flash");
+  setTimeout(() => cell.classList.remove("flash"), 700);
+}
+
+// 参加者一覧。位置の文言は shared/format.js の posLabel だけが作る。
+function drawPanel() {
+  const s = state, cur = s.players.find((p) => p.id === s.turn), t = $("turn");
+  if (s.phase === "waiting") {
+    t.textContent = s.players.length ? "「ゲーム開始」を押してください" : "参加者を待っています";
+    t.style.removeProperty("--c");
+  } else if (s.phase === "finished") {
+    const win = s.players.filter((p) => p.rank).sort((a, b) => a.rank - b.rank)[0];
+    t.innerHTML = win ? `ゲーム終了 — 優勝 <b>${win.name}</b>` : "ゲーム終了";
+    t.style.setProperty("--c", win ? win.color : "#eef0f5");
+  } else if (cur) {
+    t.innerHTML = `<b>${cur.name}</b> のばん`;
+    t.style.setProperty("--c", cur.color);
+  }
+
+  $("list").innerHTML = s.players.length ? "" : `<div id="empty">まだ誰も参加していません</div>`;
+  for (const p of s.players) {
+    const row = document.createElement("div");
+    row.id = "row" + p.id;
+    row.className = "row" + (p.id === s.turn ? " now" : "");
+    row.style.setProperty("--c", p.color);
+    row.innerHTML = `<span class="nm">${p.name}</span><span class="st">${posLabel(p)}</span>`;
+    const kick = document.createElement("button");
+    kick.className = "kick"; kick.textContent = "切断";
+    kick.onclick = () => send({ type: "kick", id: p.id });
+    row.append(kick);
+    $("list").append(row);
+  }
+
+  $("start").disabled = !s.players.length || s.phase === "playing";
+  $("start").textContent = s.phase === "finished" ? "もう一度あそぶ" : "ゲーム開始";
+}
+
+// 歩いている最中だけ、その人の行の数字を1マスずつ書き換える。
+function stepRow(pid, pos) {
+  const row = document.getElementById("row" + pid);
+  if (row) row.querySelector(".st").textContent = posLabel({ pos });
+}
+
+async function walkToken(pid, to) {
+  await walk(shown.get(pid), to, (pos, dir, i) => {
+    shown.set(pid, pos);
+    drawTokens(pid);
+    stepRow(pid, pos);
+    sound.stepTone(dir, i);
+  });
+  shown.set(pid, to);      // 念のためサーバーの値で締める
+}
+
+async function apply(s) {
+  const first = state === null;
+  state = s;
+  if (first) drawBoard(s.board);
+
+  const r = s.last_roll;
+  // 最初の1回は演出しない（再読み込みや途中参加）。以降は出目が変わるたびに演出する。
+  const animate = r && !firstState && r.seq !== lastSeq;
+  firstState = false;
+
+  // 動かす本人以外はサーバーの位置に合わせる。いなくなった人は消す。
+  for (const p of s.players) if (!animate || p.id !== r.id) shown.set(p.id, p.pos);
+  for (const id of [...shown.keys()]) if (!s.players.some((p) => p.id === id)) shown.delete(id);
+
+  if (!animate) {
+    drawPanel();
+    if (r) { $("who").textContent = r.name; $("mv").textContent = moveLabel(r.from, r.to); dice.show(r.value, false); }
+    else { $("who").textContent = ""; $("mv").textContent = "サイコロ待ち"; $("ef").textContent = ""; }
+    lastSeq = r ? r.seq : null;
+    drawTokens();
+    return;
+  }
+
+  animating = true;
+  const p = s.players.find((x) => x.id === r.id);
+  if (!shown.has(r.id)) shown.set(r.id, r.from);
+
+  $("dice").style.setProperty("--c", p ? p.color : "#8b93a7");
+  $("who").textContent = r.name;
+  $("mv").textContent = "";
+  $("ef").textContent = "";
+  $("ef").className = "";
+  drawTokens();
+
+  await dice.roll(r.value);
+
+  // 出目が確定してから駒を動かす
+  $("mv").textContent = rolledLabel(r.value);
+  await sleep(RESULT_MS);
+
+  $("mv").textContent = moveLabel(r.from, r.land);
+  await walkToken(r.id, r.land);
+
+  if (r.effect) {
+    const style = effectStyle(s.board[r.land].kind);
+    $("ef").textContent = r.effect;
+    $("ef").className = style.cls;
+    flashSquare(r.land, style.color);
+    sound.chime(style.chime);
+    await sleep(EFFECT_MS);
+    if (r.to !== r.land) {
+      await walkToken(r.id, r.to);
+      $("mv").textContent = moveLabel(r.from, r.to);
     }
-    el.querySelector(".nm").textContent = p.name;
-    el.querySelector(".ct").textContent = p.taps;
   }
+
+  if (r.rank) {
+    $("ef").textContent = goalLabel(r.rank);
+    $("ef").className = "gl";
+    flashSquare(r.to, "#ffd54f");
+    sound.chime(GOAL_CHIME, 0.13);
+    await sleep(RESULT_MS);
+  }
+
+  lastSeq = r.seq;
+  animating = false;
+  // 最後は必ずサーバーの状態で描き直す。ここで手番が次の人に変わる。
+  drawPanel();
+  drawTokens();
 }
+
+const queue = createQueue(apply);
+
+$("start").onclick = () => { sound.enable(); send({ type: "start" }); };
+$("reset").onclick = () => send({ type: "reset" });
 
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws/host`);
-
   ws.onopen = () => { $("dot").className = "on"; $("cs").textContent = "サーバー接続済み"; };
   ws.onclose = () => {
     $("dot").className = ""; $("cs").textContent = "サーバー切断 — 再接続中…";
     setTimeout(connect, 1000);
   };
-
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === "welcome") {
-      $("url").textContent = msg.join_url;
-    } else if (msg.type === "roster") {
-      render(msg.players);
-    } else if (msg.type === "join") {
-      log(`+ ${msg.player.name} が参加`);
-    } else if (msg.type === "leave") {
-      log(`- ${msg.player.name} が退出`);
-    } else if (msg.type === "tap") {
-      const el = cards.get(msg.player.id);
-      if (el) {
-        el.querySelector(".ct").textContent = msg.player.taps;
-        el.classList.add("hit");
-        setTimeout(() => el.classList.remove("hit"), 120);
-      }
-      log(`  ${msg.player.name} → TAP (${msg.player.taps})`);
-    }
+    if (msg.type === "welcome") $("url").textContent = msg.join_url;
+    else if (msg.type === "state") queue.push(msg);
   };
 }
 

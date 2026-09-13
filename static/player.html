@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>参加する</title>
+<title>すごろく</title>
+<link rel="stylesheet" href="/static/shared/dice.css">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -16,15 +17,19 @@
     overscroll-behavior: none; user-select: none;
   }
   header {
-    padding: 14px 18px; display: flex; align-items: center; gap: 10px;
+    padding: 12px 18px; display: flex; align-items: center; gap: 10px;
     border-bottom: 1px solid #262a35; font-size: 14px;
   }
   #dot { width: 9px; height: 9px; border-radius: 50%; background: #555; flex: none; }
   #dot.on { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
   #dot.off { background: #f87171; }
-  main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 24px; }
+  #mute {
+    margin-left: auto; background: none; border: 1px solid #3a4050; color: #9aa3b5;
+    border-radius: 9px; font-size: 16px; padding: 5px 9px; width: auto; line-height: 1;
+  }
+  main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 18px; }
 
-  /* 名前入力 */
+  /* ---- 名前入力 ---- */
   #entry { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 14px; }
   input {
     width: 100%; padding: 16px; font-size: 17px; border-radius: 12px;
@@ -34,57 +39,211 @@
   button {
     width: 100%; padding: 16px; font-size: 17px; font-weight: 600; border: none;
     border-radius: 12px; background: #4dd0e1; color: #06202b;
-    touch-action: manipulation; cursor: pointer;
+    touch-action: manipulation; cursor: pointer; font-family: inherit;
   }
   button:active { transform: scale(0.98); }
-
-  /* ゲーム画面 */
-  #game { display: none; flex-direction: column; align-items: center; gap: 28px; width: 100%; }
-  #who { font-size: 15px; color: #9aa3b5; }
-  #who b { color: var(--me, #fff); font-size: 19px; }
-  #tap {
-    width: min(68vw, 260px); aspect-ratio: 1; border-radius: 50%;
-    background: var(--me, #4dd0e1); color: #06202b;
-    font-size: 28px; font-weight: 800; border: none;
-    box-shadow: 0 10px 40px -8px var(--me, #4dd0e1);
-    touch-action: manipulation;
+  #notice {
+    display: none; max-width: 340px; text-align: center; font-size: 15px;
+    line-height: 1.6; color: #ffd54f; background: #241f14;
+    border: 1px solid #4a3f1e; border-radius: 12px; padding: 14px 18px;
   }
-  #tap:active { transform: scale(0.94); }
-  #count { font-size: 15px; color: #9aa3b5; font-variant-numeric: tabular-nums; }
-  #count b { color: #eef0f5; font-size: 22px; }
+
+  /* ---- ゲーム ---- */
+  #game { display: none; flex-direction: column; align-items: center; gap: 14px; width: 100%; max-width: 360px; }
+  #who { font-size: 13px; color: #9aa3b5; }
+  #who b { color: var(--me, #fff); font-size: 17px; }
+  #pos { color: #9aa3b5; font-size: 13px; font-variant-numeric: tabular-nums; }
+  #pos b { color: #eef0f5; font-size: 26px; font-weight: 800; display: inline-block; }
+  #pos b.bump { animation: bump .16s ease; }
+  @keyframes bump { 50% { transform: translateY(-6px) scale(1.15); color: var(--me, #fff) } }
+
+  #game .stage { --die: 76px; }
+
+  #msg { font-size: 15px; text-align: center; line-height: 1.55; min-height: 3.1em; display: grid; place-items: center; }
+  #msg .big { font-size: 20px; font-weight: 800; }
+
+  #roll {
+    padding: 20px; font-size: 20px; font-weight: 800; border-radius: 18px;
+    background: var(--me, #4dd0e1); color: #06202b;
+    box-shadow: 0 8px 30px -8px var(--me, #4dd0e1);
+  }
+  #roll:disabled { background: #1c1f28; color: #4a5164; box-shadow: none; border: 1px solid #262a35; }
+  #roll:disabled:active { transform: none; }
+
+  #leave {
+    background: none; border: 1px solid #3a4050; color: #9aa3b5;
+    font-size: 14px; font-weight: 500; padding: 11px 24px; width: auto;
+  }
+  #leave:active { background: #1c1f28; }
 </style>
 </head>
 <body>
-  <header><span id="dot"></span><span id="status">接続中…</span></header>
+  <header>
+    <span id="dot"></span><span id="status">接続中…</span>
+    <button id="mute" title="音のオン/オフ">🔊</button>
+  </header>
+
   <main>
     <div id="entry">
+      <div id="notice"></div>
       <input id="name" placeholder="なまえ（12文字まで）" maxlength="12" autocomplete="off">
       <button id="join">参加する</button>
     </div>
 
     <div id="game">
       <div id="who">あなた: <b id="myname"></b></div>
-      <button id="tap">TAP!</button>
-      <div id="count">おした回数 <b id="taps">0</b></div>
+      <div id="pos">いまのマス <b id="mypos">0 マス</b></div>
+      <div class="stage"><div class="cube" id="cube"></div></div>
+      <div id="msg"></div>
+      <button id="roll" disabled>まちのあいだ</button>
+      <button id="leave">退出する</button>
     </div>
   </main>
 
-<script>
-const $ = (id) => document.getElementById(id);
-let ws = null, myName = "", joined = false, retry = null;
+<script type="module">
+import { createDice } from "/static/shared/dice.js";
+import * as sound from "/static/shared/sound.js";
+import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
+import { posLabel, rolledLabel, goalLabel, rollSummary, effectStyle, GOAL_CHIME }
+  from "/static/shared/format.js";
 
-function setStatus(text, state) {
-  $("status").textContent = text;
-  $("dot").className = state || "";
+const $ = (id) => document.getElementById(id);
+const dice = createDice($("cube"));
+
+/* ---- 音 ---- */
+$("mute").textContent = sound.isMuted() ? "🔇" : "🔊";
+$("mute").onclick = () => { $("mute").textContent = sound.toggleMute() ? "🔇" : "🔊"; };
+
+/* ---- 状態 ---- */
+let ws = null, myName = "", myId = null, joined = false, retry = null;
+let state = null, lastSeq = null, firstState = true, shownPos = 0;
+
+function setStatus(text, s) { $("status").textContent = text; $("dot").className = s || ""; }
+
+function showEntry(message) {
+  joined = false; myId = null; state = null; lastSeq = null; firstState = true; shownPos = 0;
+  clearTimeout(retry);
+  $("game").style.display = "none";
+  $("entry").style.display = "flex";
+  $("notice").style.display = message ? "block" : "none";
+  $("notice").textContent = message || "";
 }
 
+// 表示は PC画面と同じ posLabel を使う。文言を2箇所で作らないための決まり。
+function showPos(player, bump) {
+  shownPos = player.pos;
+  $("mypos").textContent = posLabel(player);
+  if (!bump) return;
+  $("mypos").classList.remove("bump");
+  void $("mypos").offsetWidth;
+  $("mypos").classList.add("bump");
+}
+
+function me() {
+  return state ? state.players.find((p) => p.id === myId) : null;
+}
+
+function drawStatic() {
+  const s = state, you = me();
+  if (!you) return;
+
+  // 演出の途中で止まっても、最後は必ずサーバーの値に戻す。ここがズレ防止の要。
+  showPos(you, false);
+
+  const myTurn = s.phase === "playing" && s.turn === myId;
+  const cur = s.players.find((p) => p.id === s.turn);
+
+  if (s.phase === "waiting") {
+    $("msg").innerHTML = "<div>PC画面で「ゲーム開始」を<br>押してもらってください</div>";
+    $("roll").disabled = true; $("roll").textContent = "かいし待ち";
+  } else if (s.phase === "finished") {
+    const win = s.players.filter((p) => p.rank).sort((a, b) => a.rank - b.rank)[0];
+    $("msg").innerHTML = `<div><span class="big">ゲーム終了</span><br>優勝 ${win ? win.name : "—"}<br>` +
+      `あなた ${you.rank ? you.rank + "位" : "未ゴール"}</div>`;
+    $("roll").disabled = true; $("roll").textContent = "おわり";
+  } else if (you.rank) {
+    $("msg").innerHTML = `<div><span class="big">${goalLabel(you.rank)}</span><br>ほかの人を待っています</div>`;
+    $("roll").disabled = true; $("roll").textContent = "ゴール済み";
+  } else if (myTurn) {
+    $("msg").innerHTML = '<div><span class="big">あなたのばんです</span></div>';
+    $("roll").disabled = false; $("roll").textContent = "サイコロをふる";
+  } else {
+    const r = s.last_roll;
+    $("msg").innerHTML = r && r.id !== myId
+      ? `<div><span class="big">${rollSummary(r)[0]}</span><br>${rollSummary(r).slice(1).join("<br>")}</div>`
+      : `<div>${cur ? cur.name : "…"} のばん</div>`;
+    $("roll").disabled = true;
+    $("roll").textContent = you.resting ? "一回休み" : "まちのあいだ";
+  }
+}
+
+// 自分のマス目を1つずつ動かす。歩いている間は表示用に仮の値を使う。
+async function walkMe(you, to) {
+  await walk(shownPos, to, (pos, dir, i) => {
+    showPos({ ...you, pos, resting: false, rank: null }, true);
+    sound.stepTone(dir, i);
+  });
+}
+
+async function apply(s) {
+  state = s;
+  const you = me();
+  if (!you) return;
+
+  const r = s.last_roll;
+  // 最初の1回は演出しない（再読み込みや途中参加）。以降は出目が変わるたびに演出する。
+  const animate = r && !firstState && r.seq !== lastSeq;
+  firstState = false;
+
+  if (!animate) {
+    if (r) dice.show(r.value, false);
+    lastSeq = r ? r.seq : null;
+    drawStatic();
+    return;
+  }
+
+  $("roll").disabled = true;
+  $("msg").innerHTML = `<div><span class="big">${r.name}</span></div>`;
+  await dice.roll(r.value);
+
+  // 出目が確定してから駒を動かす
+  $("msg").innerHTML = `<div><span class="big">${rolledLabel(r.value)}</span></div>`;
+  await sleep(RESULT_MS);
+
+  if (r.id === myId) {
+    await walkMe(you, r.land);
+    if (r.effect) {
+      $("msg").innerHTML = `<div><span class="big">${r.effect}</span></div>`;
+      sound.chime(effectStyle(s.board[r.land].kind).chime);
+      await sleep(EFFECT_MS);
+      if (r.to !== r.land) await walkMe(you, r.to);
+    }
+    if (r.rank) {
+      $("msg").innerHTML = `<div><span class="big">${goalLabel(r.rank)}</span></div>`;
+      sound.chime(GOAL_CHIME, 0.13);
+      await sleep(RESULT_MS);
+    }
+  } else {
+    const lines = rollSummary(r);
+    $("msg").innerHTML = `<div><span class="big">${lines[0]}</span><br>${lines.slice(1).join("<br>")}</div>`;
+    await sleep(700);
+  }
+
+  lastSeq = r.seq;
+  drawStatic();   // 最後は必ずサーバーの状態で描き直す
+}
+
+const queue = createQueue(apply);
+
+/* ---- 接続 ---- */
 function connect() {
   clearTimeout(retry);
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${proto}//${location.host}/ws/player?name=${encodeURIComponent(myName)}`);
 
-  ws.onopen  = () => setStatus("接続中", "on");
+  ws.onopen = () => setStatus("接続中", "on");
   ws.onclose = () => {
+    if (!joined) { setStatus("退出しました"); return; }   // 自分で抜けた/キックされた
     setStatus("切断 — 再接続します…", "off");
     // iOSは画面ロックやアプリ切替でWebSocketを切る。黙って繋ぎ直す。
     retry = setTimeout(connect, 1000);
@@ -94,24 +253,45 @@ function connect() {
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === "joined") {
+      myId = msg.you.id;
+      firstState = true;          // 繋ぎ直しの直後は演出せず、いまの状態を描く
       document.documentElement.style.setProperty("--me", msg.you.color);
       $("myname").textContent = msg.you.name;
+      $("notice").style.display = "none";
       $("entry").style.display = "none";
       $("game").style.display = "flex";
-    } else if (msg.type === "ack") {
-      $("taps").textContent = msg.taps;
+    } else if (msg.type === "state") {
+      queue.push(msg);
+    } else if (msg.type === "left") {
+      showEntry("退出しました。もう一度参加できます。");
+    } else if (msg.type === "kicked") {
+      showEntry("PC画面から切断されました。");
     }
   };
 }
 
 $("join").onclick = () => {
+  sound.enable();              // このタップで音を有効化する
   myName = $("name").value.trim();
   joined = true;
+  $("notice").style.display = "none";
   connect();
 };
 
-$("tap").onclick = () => {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "tap" }));
+$("roll").onclick = () => {
+  sound.enable();
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "roll" }));
+  $("roll").disabled = true;   // 二度押し防止。次のstateで正しい状態に戻る
+};
+
+$("leave").onclick = () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "leave" }));   // サーバーが "left" を返して閉じる
+  } else {
+    showEntry("退出しました。もう一度参加できます。");
+    if (ws) ws.close();
+  }
+  joined = false;   // 自動再接続を止める
 };
 
 // ロック解除やタブ復帰で即座に繋ぎ直す（タイマー待ちを飛ばす）
