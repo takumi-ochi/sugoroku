@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>参加する</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; height: 100dvh; display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: #14161c; color: #eef0f5;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    overscroll-behavior: none; user-select: none;
+  }
+  header {
+    padding: 14px 18px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid #262a35; font-size: 14px;
+  }
+  #dot { width: 9px; height: 9px; border-radius: 50%; background: #555; flex: none; }
+  #dot.on { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+  #dot.off { background: #f87171; }
+  main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 24px; }
+
+  /* 名前入力 */
+  #entry { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 14px; }
+  input {
+    width: 100%; padding: 16px; font-size: 17px; border-radius: 12px;
+    border: 1px solid #333846; background: #1c1f28; color: #eef0f5;
+  }
+  input:focus { outline: 2px solid #4dd0e1; border-color: transparent; }
+  button {
+    width: 100%; padding: 16px; font-size: 17px; font-weight: 600; border: none;
+    border-radius: 12px; background: #4dd0e1; color: #06202b;
+    touch-action: manipulation; cursor: pointer;
+  }
+  button:active { transform: scale(0.98); }
+
+  /* ゲーム画面 */
+  #game { display: none; flex-direction: column; align-items: center; gap: 28px; width: 100%; }
+  #who { font-size: 15px; color: #9aa3b5; }
+  #who b { color: var(--me, #fff); font-size: 19px; }
+  #tap {
+    width: min(68vw, 260px); aspect-ratio: 1; border-radius: 50%;
+    background: var(--me, #4dd0e1); color: #06202b;
+    font-size: 28px; font-weight: 800; border: none;
+    box-shadow: 0 10px 40px -8px var(--me, #4dd0e1);
+    touch-action: manipulation;
+  }
+  #tap:active { transform: scale(0.94); }
+  #count { font-size: 15px; color: #9aa3b5; font-variant-numeric: tabular-nums; }
+  #count b { color: #eef0f5; font-size: 22px; }
+</style>
+</head>
+<body>
+  <header><span id="dot"></span><span id="status">接続中…</span></header>
+  <main>
+    <div id="entry">
+      <input id="name" placeholder="なまえ（12文字まで）" maxlength="12" autocomplete="off">
+      <button id="join">参加する</button>
+    </div>
+
+    <div id="game">
+      <div id="who">あなた: <b id="myname"></b></div>
+      <button id="tap">TAP!</button>
+      <div id="count">おした回数 <b id="taps">0</b></div>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let ws = null, myName = "", joined = false, retry = null;
+
+function setStatus(text, state) {
+  $("status").textContent = text;
+  $("dot").className = state || "";
+}
+
+function connect() {
+  clearTimeout(retry);
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${proto}//${location.host}/ws/player?name=${encodeURIComponent(myName)}`);
+
+  ws.onopen  = () => setStatus("接続中", "on");
+  ws.onclose = () => {
+    setStatus("切断 — 再接続します…", "off");
+    // iOSは画面ロックやアプリ切替でWebSocketを切る。黙って繋ぎ直す。
+    retry = setTimeout(connect, 1000);
+  };
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === "joined") {
+      document.documentElement.style.setProperty("--me", msg.you.color);
+      $("myname").textContent = msg.you.name;
+      $("entry").style.display = "none";
+      $("game").style.display = "flex";
+    } else if (msg.type === "ack") {
+      $("taps").textContent = msg.taps;
+    }
+  };
+}
+
+$("join").onclick = () => {
+  myName = $("name").value.trim();
+  joined = true;
+  connect();
+};
+
+$("tap").onclick = () => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "tap" }));
+};
+
+// ロック解除やタブ復帰で即座に繋ぎ直す（タイマー待ちを飛ばす）
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && joined && (!ws || ws.readyState > WebSocket.OPEN)) connect();
+});
+
+setStatus("なまえを入れてください");
+</script>
+</body>
+</html>
