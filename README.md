@@ -6,22 +6,42 @@ PCの画面に盤面を出し、手元のスマホでサイコロを振って遊
 ## 起動
 
 **`run.bat` をダブルクリック**するのが一番簡単です。
+初回のみ venv 作成と依存インストールが走ります（`run.bat` が自動でやります）。
 
-コマンドから起動する場合:
+### Git Bash から
+
+プロジェクトのフォルダで実行します。
+
+**1. セットアップ（PCごとに初回だけ）**
+
+`.venv` は git に含まれず、別のPCからコピーしても動かないので、PCごとに作ります。
 
 ```bash
-# Git Bash
+# 仮想環境を作って依存をインストール
+python -m venv .venv
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
+
+# スマホから繋がるようにファイアウォールを設定（管理者PowerShellが別ウィンドウで開く）
+powershell.exe -NoProfile -Command 'Start-Process powershell -Verb RunAs -ArgumentList ("-NoProfile -ExecutionPolicy Bypass -NoExit -File `"" + (Resolve-Path setup-firewall.ps1) + "`"")'
+```
+
+- 「このアプリがデバイスに変更を加えることを許可しますか？」には「はい」
+- 開いたウィンドウで `Private` と `GameServer 8000 (Private)` が出れば成功。ウィンドウは閉じてよい（設定は残る）
+
+**2. 起動（毎回）**
+
+```bash
 ./.venv/Scripts/python.exe main.py
 ```
 
+止めるときは `Ctrl + C`。ゲーム中はこのターミナルを閉じないこと。
+
+### PowerShell から
+
 ```powershell
-# PowerShell（実行ポリシーの制限を受けないよう -File で呼ぶ）
+# 実行ポリシーの制限を受けないよう -File で呼ぶ
 powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
-
-止めるときは `Ctrl + C`。
-
-初回のみ venv 作成と依存インストールが走ります（`run.bat` が自動でやります）。
 
 起動するとターミナルにQRコードと2つのURLが出ます。
 
