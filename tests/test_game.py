@@ -366,6 +366,71 @@ class TestSquares(unittest.TestCase):
         self.assertEqual(game.round, 3)       # 休んだぶんのターンも進む
 
 
+class TestStartFinishFromPhone(unittest.TestCase):
+    """開始と終了はPC画面からでもスマホからでもできる。"""
+
+    def setUp(self) -> None:
+        self.game = Game(rng=FixedDice(2))
+        self.a, _ = self.game.add_player("A")
+        self.b, _ = self.game.add_player("B")
+
+    def test_スマホから開始できる(self) -> None:
+        events = self.game.handle(self.b.id, {"type": "start", "rounds": 4})
+
+        self.assertEqual(self.game.phase, PLAYING)
+        self.assertEqual((self.game.round, self.game.rounds), (1, 4))
+        self.assertEqual(self.game.current, self.a.id)      # 手番は参加順の先頭から
+        self.assertEqual([e.to for e in events], [HOSTS, PLAYERS])
+
+    def test_遊んでいる最中の開始は無視される(self) -> None:
+        self.game.handle_host({"type": "start", "rounds": 4})
+        self.game.handle(self.a.id, {"type": "roll"})
+
+        self.assertEqual(self.game.handle(self.b.id, {"type": "start"}), [])
+        self.assertEqual(self.game.handle_host({"type": "start"}), [])
+        self.assertEqual(self.a.pos, 2)                      # 進行が消えていない
+        self.assertEqual(self.game.current, self.b.id)
+
+    def test_スマホから終了できその時点の所持金で順位がつく(self) -> None:
+        self.game.handle_host({"type": "start", "rounds": 10})
+        self.a.money = 1500
+
+        events = self.game.handle(self.b.id, {"type": "finish"})
+
+        self.assertEqual(self.game.phase, FINISHED)
+        self.assertIsNone(self.game.current)
+        self.assertEqual(self.game.ranks(), {self.a.id: 1, self.b.id: 2})
+        self.assertEqual([e.to for e in events], [HOSTS, PLAYERS])
+
+    def test_PC画面からも終了できる(self) -> None:
+        self.game.handle_host({"type": "start"})
+
+        self.game.handle_host({"type": "finish"})
+
+        self.assertEqual(self.game.phase, FINISHED)
+
+    def test_遊んでいないときの終了は無視される(self) -> None:
+        self.assertEqual(self.game.handle(self.a.id, {"type": "finish"}), [])
+        self.assertEqual(self.game.phase, WAITING)
+
+        self.game.handle_host({"type": "start"})
+        self.game.handle_host({"type": "finish"})
+
+        self.assertEqual(self.game.handle_host({"type": "finish"}), [])
+
+    def test_終了後にスマホから再開できる(self) -> None:
+        self.game.handle_host({"type": "start", "rounds": 10})
+        self.game.handle(self.a.id, {"type": "roll"})
+        self.game.handle_host({"type": "finish"})
+
+        self.game.handle(self.b.id, {"type": "start", "rounds": 2})
+
+        self.assertEqual(self.game.phase, PLAYING)
+        self.assertEqual(self.a.pos, 0)
+        self.assertEqual(self.a.money, board.START_MONEY)
+        self.assertEqual((self.game.round, self.game.rounds), (1, 2))
+
+
 class TestRanking(unittest.TestCase):
     def test_所持金の多い順に順位がつく(self) -> None:
         game = Game()

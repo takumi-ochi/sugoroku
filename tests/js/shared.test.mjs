@@ -10,11 +10,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  posLabel, moneyLabel, deltaLabel, rankLabel, roundLabel, salaryLabel,
+  posLabel, moneyLabel, deltaLabel, rankLabel, roundLabel, roundValue, playersLabel, salaryLabel,
   moveLabel, rolledLabel, byRank, winnersLabel, rollSummary, effectStyle,
   SALARY_CHIME, FINISH_CHIME,
 } from "../../static/shared/format.js";
 import { walk, createQueue } from "../../static/shared/anim.js";
+import { ringSize, ringLayout } from "../../static/shared/ring.js";
 
 /* ---------- 表示文言 ---------- */
 
@@ -42,7 +43,9 @@ test("増減は符号つきで出る", () => {
 
 test("順位とターンの文言", () => {
   assert.equal(rankLabel(2), "2位");
+  assert.equal(roundValue(3, 10), "3 / 10");
   assert.equal(roundLabel(3, 10), "ターン 3 / 10");
+  assert.equal(playersLabel(4), "4人中");
 });
 
 test("順位順に並べ、同順位は参加順のまま", () => {
@@ -127,6 +130,36 @@ test("歩き終わりはサーバーと同じ計算の位置になる", async ()
   for (const [from, steps] of [[0, 6], [20, 4], [24, -4], [28, 6], [2, -4]]) {
     assert.equal(await walk(from, steps, 30, () => {}, 0), (((from + steps) % 30) + 30) % 30);
   }
+});
+
+/* ---------- 盤を輪に並べる ---------- */
+
+test("30マスは横10×縦7の外周にちょうど収まる", () => {
+  assert.deepEqual(ringSize(30), { cols: 10, rows: 7 });
+});
+
+test("輪の配置は外周だけを重ならずに一周する", () => {
+  const { cols, rows } = ringSize(30);
+  const cells = ringLayout(30);
+
+  assert.equal(cells.length, 30);
+  assert.equal(new Set(cells.map((c) => `${c.row},${c.col}`)).size, 30);   // 重ならない
+  for (const c of cells) {
+    assert.ok(c.row === 1 || c.row === rows || c.col === 1 || c.col === cols, "内側に入っている");
+  }
+  // 隣り合うマス（最後→最初も含む）は上下左右に1つずれた位置にある
+  for (let i = 0; i < 30; i++) {
+    const a = cells[i], b = cells[(i + 1) % 30];
+    assert.equal(Math.abs(a.row - b.row) + Math.abs(a.col - b.col), 1, `${i} と次のマスが離れている`);
+  }
+});
+
+test("スタートは左上で、時計回りに並ぶ", () => {
+  const cells = ringLayout(30);
+  assert.deepEqual(cells[0], { row: 1, col: 1 });
+  assert.deepEqual(cells[9], { row: 1, col: 10 });    // 上の辺の右端
+  assert.deepEqual(cells[10], { row: 2, col: 10 });   // 右の辺へ下る
+  assert.deepEqual(cells[29], { row: 2, col: 1 });    // 最後はスタートの真下
 });
 
 /* ---------- 状態の順番待ち ---------- */

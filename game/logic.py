@@ -157,6 +157,13 @@ class Game:
         if kind == "roll":
             return self._roll(player)
 
+        # 開始と終了はスマホからもできる。PC画面の前に人がいなくても遊べるように。
+        if kind == "start":
+            return self.start(message.get("rounds"))
+
+        if kind == "finish":
+            return self.finish()
+
         if kind == "leave":
             # 本人が退出ボタンを押した
             return [
@@ -173,6 +180,8 @@ class Game:
 
         if kind == "start":
             return self.start(message.get("rounds"))
+        if kind == "finish":
+            return self.finish()
         if kind == "reset":
             return self.reset()
         if kind == "kick":
@@ -191,8 +200,11 @@ class Game:
     # ---- 進行 ----------------------------------------------------------
 
     def start(self, rounds: object = None) -> list[Event]:
-        """ゲーム開始。rounds を省くと前回と同じターン数で遊ぶ。"""
-        if not self.order:
+        """ゲーム開始。rounds を省くと前回と同じターン数で遊ぶ。
+
+        遊んでいる最中は受け付けない（スマホの誤操作で進行が消えないように）。
+        """
+        if not self.order or self.phase == PLAYING:
             return []
         self.rounds = parse_rounds(rounds, default=self.rounds)
         self._reset_players()
@@ -200,6 +212,14 @@ class Game:
         self.current = self.order[0]
         self.round = 1
         self.last_roll = None
+        return self._broadcast()
+
+    def finish(self) -> list[Event]:
+        """ターンの途中でも、その時点の所持金で順位を決めて終わる。"""
+        if self.phase != PLAYING:
+            return []
+        self.phase = FINISHED
+        self.current = None
         return self._broadcast()
 
     def reset(self) -> list[Event]:

@@ -25,9 +25,19 @@ export function rankLabel(rank) {
   return `${rank}位`;
 }
 
-/** 何ターン目か。 */
+/** 何ターン目か。数字だけ（スマホの大きい表示用）。 */
+export function roundValue(round, rounds) {
+  return `${round} / ${rounds}`;
+}
+
+/** 何ターン目か。見出し付き。 */
 export function roundLabel(round, rounds) {
-  return `ターン ${round} / ${rounds}`;
+  return `ターン ${roundValue(round, rounds)}`;
+}
+
+/** 何人中か（順位に添える）。 */
+export function playersLabel(count) {
+  return `${count}人中`;
 }
 
 /** スタートを通過したときの表示。 */

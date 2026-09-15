@@ -8,6 +8,8 @@
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
+  /* display を持つ要素にも hidden 属性を効かせる */
+  [hidden] { display: none !important; }
   body {
     margin: 0; height: 100vh; overflow: hidden; background: #0f1117; color: #eef0f5;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Yu Gothic UI", sans-serif;
@@ -15,6 +17,26 @@
   }
 
   header { display: flex; align-items: center; gap: 24px; padding: 14px 28px; border-bottom: 1px solid #22262f; flex: none; }
+  /* 遊んでいる間はQRと参加URLを隠し、盤を画面いっぱいに使う */
+  body.playing header { display: none; }
+  body.playing main { padding: 18px 22px; }
+
+  /* 開始前はQRだけの画面にする（盤はまだ見せない） */
+  #lobby { display: none; }
+  body.waiting header, body.waiting main { display: none; }
+  body.waiting #lobby {
+    display: flex; flex: 1; min-height: 0; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; padding: 24px;
+  }
+  #lobby #qr2 { width: min(44vh, 44vw); height: auto; background: #fff; border-radius: 16px; padding: 14px; }
+  #lobby .lead { font-size: 15px; color: #8b93a7; letter-spacing: .08em; }
+  #lobbyurl { font-size: clamp(22px, 2.6vw, 34px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  #chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 900px; }
+  #chips .chip {
+    padding: 7px 14px; border-radius: 999px; border: 1px solid var(--c, #262a35);
+    background: #171a22; font-size: 14px; font-weight: 700; color: var(--c, #8b93a7);
+  }
+  #lobbyctrl { display: flex; flex-direction: column; gap: 10px; width: min(100%, 420px); }
   #qr { width: 88px; height: 88px; background: #fff; border-radius: 10px; padding: 6px; flex: none; }
   .lead { font-size: 13px; color: #8b93a7; letter-spacing: .08em; }
   #url { font-size: 25px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
@@ -30,18 +52,26 @@
 
   main { flex: 1; display: grid; grid-template-columns: 1fr 340px; gap: 22px; padding: 22px 28px; min-height: 0; }
 
-  /* ---- 盤面 ---- */
-  #board { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; align-content: start; }
+  /* ---- 盤面（外周に輪として並べる。配置は shared/ring.js） ---- */
+  #board { display: grid; gap: 7px; height: 100%; min-height: 0; }
   .sq {
-    position: relative; border-radius: 10px; padding: 6px; min-height: 90px;
+    position: relative; border-radius: 10px; padding: 5px 6px; min-height: 0; overflow: hidden;
     background: #171a22; border: 1px solid #262a35; display: flex; flex-direction: column;
     transition: box-shadow .15s, border-color .15s;
   }
   .sq .no { font-size: 11px; color: #5c6478; font-variant-numeric: tabular-nums; }
-  .sq .lb { font-size: 10px; line-height: 1.3; margin-top: 2px; font-weight: 600; }
+  .sq .lb { font-size: 10px; line-height: 1.25; margin-top: 1px; font-weight: 600; }
   .sq .tokens { margin-top: auto; display: flex; flex-wrap: wrap; gap: 3px; }
+
+  /* 輪の内側。手番とサイコロを置く */
+  #center {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 8px; min-height: 0;
+  }
+  #center > * { width: min(100%, 380px); }
+  #center .dir { width: auto; font-size: 12px; color: #5c6478; letter-spacing: .1em; }
   .tk {
-    width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center;
+    width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center;
     font-size: 11px; font-weight: 800; color: #0f1117; background: var(--c);
     box-shadow: 0 0 0 2px #0f1117;
   }
@@ -110,9 +140,19 @@
   #ctrl button { flex: 1; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 10px; border: none; cursor: pointer; font-family: inherit; }
   #start { background: #4dd0e1; color: #06202b; }
   #start:disabled { background: #262a35; color: #5c6478; cursor: not-allowed; }
+  #finish { background: none; border: 1px solid #6b5a20 !important; color: #ffd54f; }
+  #finish:hover { background: #241f14; }
   #reset { background: none; border: 1px solid #3a4050 !important; color: #8b93a7; }
 
   #empty { color: #5c6478; font-size: 14px; text-align: center; padding: 18px; }
+
+  /* 音がまだ鳴らせないときの案内。クリックすれば消える */
+  #sndhint {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 20;
+    background: #241f14; border: 1px solid #4a3f1e; color: #ffd54f;
+    padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    box-shadow: 0 8px 24px -10px #000;
+  }
 </style>
 </head>
 <body>
@@ -128,19 +168,33 @@
     </div>
   </header>
 
+  <div id="sndhint" hidden>🔈 画面のどこかをクリックすると音が鳴ります</div>
+
+  <section id="lobby">
+    <img id="qr2" src="/qr.svg" alt="参加用QRコード">
+    <div class="lead">スマホでQRを読んで参加してください</div>
+    <div id="lobbyurl">…</div>
+    <div id="chips"></div>
+    <div id="lobbyctrl"></div>
+  </section>
+
   <main>
-    <div id="board"></div>
+    <div id="board">
+      <div id="center">
+        <div id="turn">参加者を待っています</div>
+
+        <div id="dice">
+          <div id="who"></div>
+          <div class="stage"><div class="cube" id="cube"></div></div>
+          <div id="mv">サイコロ待ち</div>
+          <div id="ef"></div>
+        </div>
+
+        <div class="dir">↻ 時計回りに一周してスタートへ</div>
+      </div>
+    </div>
 
     <aside>
-      <div id="turn">参加者を待っています</div>
-
-      <div id="dice">
-        <div id="who"></div>
-        <div class="stage"><div class="cube" id="cube"></div></div>
-        <div id="mv">サイコロ待ち</div>
-        <div id="ef"></div>
-      </div>
-
       <div id="list"><div id="empty">まだ誰も参加していません</div></div>
 
       <div id="setup">
@@ -150,6 +204,7 @@
       </div>
       <div id="ctrl">
         <button id="start" disabled>ゲーム開始</button>
+        <button id="finish" hidden>ここで終了</button>
         <button id="reset">リセット</button>
       </div>
     </aside>
@@ -159,6 +214,7 @@
 import { createDice } from "/static/shared/dice.js";
 import * as sound from "/static/shared/sound.js";
 import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
+import { ringSize, ringLayout } from "/static/shared/ring.js";
 import {
   posLabel, moneyLabel, deltaLabel, rankLabel, roundLabel, salaryLabel, moveLabel, rolledLabel,
   byRank, winnersLabel, effectStyle, SALARY_CHIME, FINISH_CHIME,
@@ -170,22 +226,35 @@ const dice = createDice($("cube"));
 /* ---- 音 ---- */
 $("mute").textContent = sound.isMuted() ? "🔇" : "🔊";
 $("mute").onclick = () => { $("mute").textContent = sound.toggleMute() ? "🔇" : "🔊"; };
-["pointerdown", "keydown"].forEach((e) => window.addEventListener(e, () => sound.enable(), { once: true }));
+
+// ブラウザは操作があるまで音を鳴らせない。鳴るようになるまで待ち受け、
+// それまでは画面に案内を出す（スマホから開始してPCを触らない場合の無音対策）。
+sound.armEnable((ready) => { $("sndhint").hidden = ready || sound.isMuted(); });
 
 /* ---- 盤面 ---- */
 let ws = null, state = null, shown = new Map(), lastSeq = null, firstState = true, animating = false;
 
 function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
 
+// マスを外周に輪として並べ、内側に手番とサイコロ（#center）を置く。
 function drawBoard(s) {
-  $("board").innerHTML = "";
+  const board = $("board"), center = $("center");
+  const { cols, rows } = ringSize(s.board.length);
+  const cells = ringLayout(s.board.length);
+  board.querySelectorAll(".sq").forEach((el) => el.remove());
+  board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  board.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+  center.style.gridArea = `2 / 2 / ${rows} / ${cols}`;
+
   s.board.forEach((sq, i) => {
     const el = document.createElement("div");
     el.className = "sq " + sq.kind;
     el.id = "sq" + i;
+    el.style.gridRow = cells[i].row;
+    el.style.gridColumn = cells[i].col;
     const label = sq.kind === "start" ? `${sq.label}<br>通過 ${deltaLabel(s.salary)}` : sq.label;
     el.innerHTML = `<div class="no">${i}</div><div class="lb">${label || ""}</div><div class="tokens"></div>`;
-    $("board").append(el);
+    board.append(el);
   });
 }
 
@@ -250,10 +319,33 @@ function drawPanel() {
   }
 
   const playing = s.phase === "playing";
-  $("start").disabled = !s.players.length || playing;
+  const waiting = s.phase === "waiting";
+  document.body.classList.toggle("playing", playing);   // 遊んでいる間はQRを隠す
+  document.body.classList.toggle("waiting", waiting);   // 開始前はQRだけの画面
+
+  // 操作パネルは1組だけ持ち、開始前はロビーへ、始まったら右側へ移す（二重に持たない）
+  if (waiting) {
+    $("lobbyctrl").append($("setup"), $("ctrl"));
+    $("lobby").append($("right"));
+    $("chips").innerHTML = s.players.length ? "" : `<div class="chip">まだ誰も参加していません</div>`;
+    for (const p of s.players) {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.style.setProperty("--c", p.color);
+      chip.textContent = p.name;
+      $("chips").append(chip);
+    }
+  } else {
+    document.querySelector("aside").append($("setup"), $("ctrl"));
+    document.querySelector("header").append($("right"));
+  }
+
+  $("start").hidden = playing;
+  $("finish").hidden = !playing;
+  $("setup").hidden = playing;
+  $("start").disabled = !s.players.length;
   $("start").textContent = s.phase === "finished" ? "もう一度あそぶ" : "ゲーム開始";
-  $("rounds").disabled = playing;
-  if (playing) $("rounds").value = s.rounds;
+  if (document.activeElement !== $("rounds")) $("rounds").value = s.rounds;
 }
 
 // 演出中だけ、その人の行の位置と金額を書き換える。
@@ -366,6 +458,9 @@ async function apply(s) {
 const queue = createQueue(apply);
 
 $("start").onclick = () => { sound.enable(); send({ type: "start", rounds: Number($("rounds").value) }); };
+$("finish").onclick = () => {
+  if (confirm("ここでゲームを終了して、いまの所持金で順位を決めますか？")) send({ type: "finish" });
+};
 $("reset").onclick = () => send({ type: "reset" });
 
 function connect() {
@@ -377,7 +472,7 @@ function connect() {
   };
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === "welcome") $("url").textContent = msg.join_url;
+    if (msg.type === "welcome") $("url").textContent = $("lobbyurl").textContent = msg.join_url;
     else if (msg.type === "state") queue.push(msg);
   };
 }
