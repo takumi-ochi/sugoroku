@@ -28,7 +28,7 @@
   }
   #mute:hover { border-color: #5c6478; }
 
-  main { flex: 1; display: grid; grid-template-columns: 1fr 300px; gap: 22px; padding: 22px 28px; min-height: 0; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 340px; gap: 22px; padding: 22px 28px; min-height: 0; }
 
   /* ---- 盤面 ---- */
   #board { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; align-content: start; }
@@ -50,14 +50,17 @@
   @keyframes hop { 0% { transform: translateY(0) scale(1) } 50% { transform: translateY(-9px) scale(1.15) } 100% { transform: translateY(0) scale(1) } }
 
   .sq.start   { background: #10202b; border-color: #1d4a63; }
-  .sq.goal    { background: #2b2413; border-color: #6b5a20; }
-  .sq.goal .lb, .sq.start .lb { color: #ffd54f; }
+  .sq.start .lb { color: #4dd0e1; }
   .sq.forward { background: #12241a; border-color: #2c5f3f; }
   .sq.forward .lb { color: #81c784; }
-  .sq.back    { background: #2a1618; border-color: #6b2f33; }
-  .sq.back .lb { color: #ff8a90; }
-  .sq.rest    { background: #241f14; border-color: #6b5a20; }
-  .sq.rest .lb { color: #ffd54f; }
+  .sq.back    { background: #2a1d14; border-color: #6b4220; }
+  .sq.back .lb { color: #ff9d5c; }
+  .sq.rest    { background: #1f1a2b; border-color: #4f3d73; }
+  .sq.rest .lb { color: #ba8cff; }
+  .sq.gain    { background: #2b2413; border-color: #6b5a20; }
+  .sq.gain .lb { color: #ffd54f; }
+  .sq.lose    { background: #2a1618; border-color: #6b2f33; }
+  .sq.lose .lb { color: #ff6b7a; }
   .sq.here    { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.3); }
   .sq.flash   { border-color: var(--fc, #fff); box-shadow: 0 0 22px -2px var(--fc, #fff); }
 
@@ -66,27 +69,42 @@
 
   #turn { font-size: 14px; text-align: center; padding: 10px; border-radius: 10px; background: #171a22; border: 1px solid #262a35; flex: none; }
   #turn b { font-size: 17px; color: var(--c, #eef0f5); }
+  #turn .rd { font-size: 12px; color: #8b93a7; font-variant-numeric: tabular-nums; margin-bottom: 3px; letter-spacing: .05em; }
 
   #dice { border: 1px solid #262a35; border-radius: 14px; padding: 14px; text-align: center; background: #171a22; flex: none; }
   #dice .stage { --die: 104px; }
   #who { font-size: 15px; font-weight: 700; color: var(--c, #5c6478); min-height: 1.3em; }
   #mv { font-size: 15px; font-weight: 600; color: #8b93a7; font-variant-numeric: tabular-nums; min-height: 1.3em; }
   #ef { font-size: 14px; font-weight: 700; min-height: 1.3em; }
-  #ef.fw { color: #81c784; } #ef.bk { color: #ff8a90; } #ef.rs { color: #ffd54f; } #ef.gl { color: #ffd54f; }
+  #ef.fw { color: #81c784; } #ef.bk { color: #ff9d5c; } #ef.rs { color: #ba8cff; }
+  #ef.gn { color: #ffd54f; } #ef.ls { color: #ff6b7a; }
 
   #list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; }
   .row {
-    display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+    display: flex; align-items: center; gap: 10px; padding: 8px 11px;
     border-radius: 10px; border: 1px solid #262a35; background: #171a22;
   }
   .row.now { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, #171a22); }
-  .row .nm { font-weight: 700; color: var(--c); font-size: 14px; }
-  .row .st { margin-left: auto; font-size: 12px; color: #8b93a7; font-variant-numeric: tabular-nums; }
+  .row .rk { width: 30px; flex: none; font-size: 13px; font-weight: 800; color: #8b93a7; font-variant-numeric: tabular-nums; }
+  .row .rk.top { color: #ffd54f; }
+  .row .info { display: flex; flex-direction: column; min-width: 0; }
+  .row .nm { font-weight: 700; color: var(--c); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .st { font-size: 11px; color: #8b93a7; font-variant-numeric: tabular-nums; }
+  .row .mn { margin-left: auto; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row .mn.bump { animation: bump .2s ease; }
+  @keyframes bump { 50% { transform: scale(1.15); color: #ffd54f } }
   .row .kick {
     border: 1px solid #3a4050; background: none; color: #8b93a7; border-radius: 7px;
-    font-size: 11px; padding: 4px 8px; cursor: pointer; font-family: inherit;
+    font-size: 11px; padding: 4px 8px; cursor: pointer; font-family: inherit; flex: none;
   }
   .row .kick:hover { background: #f87171; border-color: #f87171; color: #14161c; }
+
+  #setup { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #8b93a7; flex: none; }
+  #rounds {
+    width: 72px; padding: 8px; font-size: 16px; font-weight: 700; text-align: center;
+    border-radius: 8px; border: 1px solid #3a4050; background: #171a22; color: #eef0f5; font-family: inherit;
+  }
+  #rounds:disabled { color: #5c6478; }
 
   #ctrl { display: flex; gap: 8px; flex: none; }
   #ctrl button { flex: 1; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 10px; border: none; cursor: pointer; font-family: inherit; }
@@ -125,6 +143,11 @@
 
       <div id="list"><div id="empty">まだ誰も参加していません</div></div>
 
+      <div id="setup">
+        <label for="rounds">遊ぶターン数</label>
+        <input id="rounds" type="number" min="1" max="50" value="10">
+        <span>ターン</span>
+      </div>
       <div id="ctrl">
         <button id="start" disabled>ゲーム開始</button>
         <button id="reset">リセット</button>
@@ -136,8 +159,10 @@
 import { createDice } from "/static/shared/dice.js";
 import * as sound from "/static/shared/sound.js";
 import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
-import { posLabel, moveLabel, rolledLabel, goalLabel, effectStyle, GOAL_CHIME }
-  from "/static/shared/format.js";
+import {
+  posLabel, moneyLabel, deltaLabel, rankLabel, roundLabel, salaryLabel, moveLabel, rolledLabel,
+  byRank, winnersLabel, effectStyle, SALARY_CHIME, FINISH_CHIME,
+} from "/static/shared/format.js";
 
 const $ = (id) => document.getElementById(id);
 const dice = createDice($("cube"));
@@ -152,13 +177,14 @@ let ws = null, state = null, shown = new Map(), lastSeq = null, firstState = tru
 
 function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
 
-function drawBoard(squares) {
+function drawBoard(s) {
   $("board").innerHTML = "";
-  squares.forEach((sq, i) => {
+  s.board.forEach((sq, i) => {
     const el = document.createElement("div");
     el.className = "sq " + sq.kind;
     el.id = "sq" + i;
-    el.innerHTML = `<div class="no">${i}</div><div class="lb">${sq.label || ""}</div><div class="tokens"></div>`;
+    const label = sq.kind === "start" ? `${sq.label}<br>通過 ${deltaLabel(s.salary)}` : sq.label;
+    el.innerHTML = `<div class="no">${i}</div><div class="lb">${label || ""}</div><div class="tokens"></div>`;
     $("board").append(el);
   });
 }
@@ -188,28 +214,34 @@ function flashSquare(pos, color) {
   setTimeout(() => cell.classList.remove("flash"), 700);
 }
 
-// 参加者一覧。位置の文言は shared/format.js の posLabel だけが作る。
+// 参加者一覧（所持金の多い順）。文言は shared/format.js だけが作る。
 function drawPanel() {
   const s = state, cur = s.players.find((p) => p.id === s.turn), t = $("turn");
   if (s.phase === "waiting") {
-    t.textContent = s.players.length ? "「ゲーム開始」を押してください" : "参加者を待っています";
+    t.textContent = s.players.length ? "ターン数を決めて「ゲーム開始」" : "参加者を待っています";
     t.style.removeProperty("--c");
   } else if (s.phase === "finished") {
-    const win = s.players.filter((p) => p.rank).sort((a, b) => a.rank - b.rank)[0];
-    t.innerHTML = win ? `ゲーム終了 — 優勝 <b>${win.name}</b>` : "ゲーム終了";
+    const win = s.players.find((p) => p.rank === 1);
+    t.innerHTML = win
+      ? `<div class="rd">ゲーム終了</div>優勝 <b>${winnersLabel(s.players)}</b>　${moneyLabel(win.money)}`
+      : "ゲーム終了";
     t.style.setProperty("--c", win ? win.color : "#eef0f5");
   } else if (cur) {
-    t.innerHTML = `<b>${cur.name}</b> のばん`;
+    t.innerHTML = `<div class="rd">${roundLabel(s.round, s.rounds)}</div><b>${cur.name}</b> のばん`;
     t.style.setProperty("--c", cur.color);
   }
 
   $("list").innerHTML = s.players.length ? "" : `<div id="empty">まだ誰も参加していません</div>`;
-  for (const p of s.players) {
+  for (const p of byRank(s.players)) {
     const row = document.createElement("div");
     row.id = "row" + p.id;
     row.className = "row" + (p.id === s.turn ? " now" : "");
     row.style.setProperty("--c", p.color);
-    row.innerHTML = `<span class="nm">${p.name}</span><span class="st">${posLabel(p)}</span>`;
+    const rank = s.phase === "waiting" ? "—" : rankLabel(p.rank);
+    row.innerHTML =
+      `<span class="rk${s.phase !== "waiting" && p.rank === 1 ? " top" : ""}">${rank}</span>` +
+      `<div class="info"><span class="nm">${p.name}</span><span class="st">${posLabel(p)}</span></div>` +
+      `<span class="mn">${moneyLabel(p.money)}</span>`;
     const kick = document.createElement("button");
     kick.className = "kick"; kick.textContent = "切断";
     kick.onclick = () => send({ type: "kick", id: p.id });
@@ -217,30 +249,44 @@ function drawPanel() {
     $("list").append(row);
   }
 
-  $("start").disabled = !s.players.length || s.phase === "playing";
+  const playing = s.phase === "playing";
+  $("start").disabled = !s.players.length || playing;
   $("start").textContent = s.phase === "finished" ? "もう一度あそぶ" : "ゲーム開始";
+  $("rounds").disabled = playing;
+  if (playing) $("rounds").value = s.rounds;
 }
 
-// 歩いている最中だけ、その人の行の数字を1マスずつ書き換える。
+// 演出中だけ、その人の行の位置と金額を書き換える。
 function stepRow(pid, pos) {
   const row = document.getElementById("row" + pid);
   if (row) row.querySelector(".st").textContent = posLabel({ pos });
 }
 
-async function walkToken(pid, to) {
-  await walk(shown.get(pid), to, (pos, dir, i) => {
+function stepMoney(pid, money) {
+  const row = document.getElementById("row" + pid);
+  if (!row) return;
+  const el = row.querySelector(".mn");
+  el.textContent = moneyLabel(money);
+  el.classList.remove("bump");
+  void el.offsetWidth;
+  el.classList.add("bump");
+}
+
+async function walkToken(pid, steps, onPass) {
+  const to = await walk(shown.get(pid), steps, state.size, (pos, dir, i) => {
     shown.set(pid, pos);
     drawTokens(pid);
     stepRow(pid, pos);
     sound.stepTone(dir, i);
+    if (dir > 0 && pos === 0) onPass();
   });
-  shown.set(pid, to);      // 念のためサーバーの値で締める
+  shown.set(pid, to);
 }
 
 async function apply(s) {
   const first = state === null;
   state = s;
-  if (first) drawBoard(s.board);
+  if (first) drawBoard(s);
 
   const r = s.last_roll;
   // 最初の1回は演出しない（再読み込みや途中参加）。以降は出目が変わるたびに演出する。
@@ -277,8 +323,19 @@ async function apply(s) {
   $("mv").textContent = rolledLabel(r.value);
   await sleep(RESULT_MS);
 
+  // 表示用の所持金。スタート通過やマスの効果のたびに足していき、最後にサーバーの値で締める。
+  let money = r.before;
+  const onPass = () => {
+    money += s.salary;
+    stepMoney(r.id, money);
+    $("ef").textContent = salaryLabel(s.salary);
+    $("ef").className = "gn";
+    flashSquare(0, "#4dd0e1");
+    sound.chime(SALARY_CHIME);
+  };
+
   $("mv").textContent = moveLabel(r.from, r.land);
-  await walkToken(r.id, r.land);
+  await walkToken(r.id, r.value, onPass);
 
   if (r.effect) {
     const style = effectStyle(s.board[r.land].kind);
@@ -286,31 +343,29 @@ async function apply(s) {
     $("ef").className = style.cls;
     flashSquare(r.land, style.color);
     sound.chime(style.chime);
+    if (r.gain) { money += r.gain; stepMoney(r.id, money); }
     await sleep(EFFECT_MS);
-    if (r.to !== r.land) {
-      await walkToken(r.id, r.to);
+    if (r.shift) {
+      await walkToken(r.id, r.shift, onPass);
       $("mv").textContent = moveLabel(r.from, r.to);
     }
   }
 
-  if (r.rank) {
-    $("ef").textContent = goalLabel(r.rank);
-    $("ef").className = "gl";
-    flashSquare(r.to, "#ffd54f");
-    sound.chime(GOAL_CHIME, 0.13);
+  if (s.phase === "finished") {
     await sleep(RESULT_MS);
+    sound.chime(FINISH_CHIME, 0.13);
   }
 
   lastSeq = r.seq;
   animating = false;
-  // 最後は必ずサーバーの状態で描き直す。ここで手番が次の人に変わる。
+  // 最後は必ずサーバーの状態で描き直す。ここで手番と順位が更新される。
   drawPanel();
   drawTokens();
 }
 
 const queue = createQueue(apply);
 
-$("start").onclick = () => { sound.enable(); send({ type: "start" }); };
+$("start").onclick = () => { sound.enable(); send({ type: "start", rounds: Number($("rounds").value) }); };
 $("reset").onclick = () => send({ type: "reset" });
 
 function connect() {

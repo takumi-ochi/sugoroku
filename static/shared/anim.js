@@ -8,21 +8,21 @@ export function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** from から to まで1マスずつ進む。
+/** from から steps マス、1マスずつ進む（負なら戻る）。
  *
+ * 盤は一周つながっているので、size を越えたら 0 に戻る。
  * 各マスで onStep(位置, 向き, 何歩目) を呼ぶ。描画と音は呼び出し側の仕事。
- * 戻り値は to（= サーバーが言っている位置）なので、ここを使えばズレない。
+ * 戻り値は着いた位置。
  */
-export async function walk(from, to, onStep, delay = STEP_MS) {
+export async function walk(from, steps, size, onStep, delay = STEP_MS) {
+  const dir = steps > 0 ? 1 : -1;
   let pos = from;
-  const dir = to > pos ? 1 : -1;
-  let i = 0;
-  while (pos !== to) {
-    pos += dir;
-    onStep(pos, dir, i++);
+  for (let i = 0; i < Math.abs(steps); i++) {
+    pos = (pos + dir + size) % size;
+    onStep(pos, dir, i);
     await sleep(delay);
   }
-  return to;
+  return pos;
 }
 
 /** 受け取った状態を順に処理する。演出中に届いた分は待たせる。

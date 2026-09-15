@@ -49,13 +49,23 @@
   }
 
   /* ---- ゲーム ---- */
-  #game { display: none; flex-direction: column; align-items: center; gap: 14px; width: 100%; max-width: 360px; }
+  #game { display: none; flex-direction: column; align-items: center; gap: 12px; width: 100%; max-width: 360px; }
   #who { font-size: 13px; color: #9aa3b5; }
   #who b { color: var(--me, #fff); font-size: 17px; }
-  #pos { color: #9aa3b5; font-size: 13px; font-variant-numeric: tabular-nums; }
-  #pos b { color: #eef0f5; font-size: 26px; font-weight: 800; display: inline-block; }
-  #pos b.bump { animation: bump .16s ease; }
-  @keyframes bump { 50% { transform: translateY(-6px) scale(1.15); color: var(--me, #fff) } }
+
+  #wallet {
+    width: 100%; text-align: center; padding: 12px; border-radius: 14px;
+    background: #1c1f28; border: 1px solid #262a35;
+  }
+  #wallet .lb { font-size: 12px; color: #9aa3b5; letter-spacing: .05em; }
+  #mymoney { font-size: 32px; font-weight: 800; font-variant-numeric: tabular-nums; display: inline-block; }
+  #mymoney.bump { animation: pop .22s ease; }
+  @keyframes pop { 50% { transform: scale(1.15); color: #ffd54f } }
+  #sub { display: flex; justify-content: center; gap: 14px; margin-top: 4px; font-size: 13px; color: #9aa3b5; font-variant-numeric: tabular-nums; }
+  #myrank { color: #eef0f5; font-weight: 700; }
+  #mypos { display: inline-block; }
+  #mypos.bump { animation: bump .16s ease; }
+  @keyframes bump { 50% { transform: translateY(-4px); color: var(--me, #fff) } }
 
   #game .stage { --die: 76px; }
 
@@ -92,7 +102,11 @@
 
     <div id="game">
       <div id="who">あなた: <b id="myname"></b></div>
-      <div id="pos">いまのマス <b id="mypos">0 マス</b></div>
+      <div id="wallet">
+        <div class="lb">所持金</div>
+        <b id="mymoney">—</b>
+        <div id="sub"><span id="myrank">—</span><span id="mypos">0 マス</span><span id="round"></span></div>
+      </div>
       <div class="stage"><div class="cube" id="cube"></div></div>
       <div id="msg"></div>
       <button id="roll" disabled>まちのあいだ</button>
@@ -104,8 +118,10 @@
 import { createDice } from "/static/shared/dice.js";
 import * as sound from "/static/shared/sound.js";
 import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
-import { posLabel, rolledLabel, goalLabel, rollSummary, effectStyle, GOAL_CHIME }
-  from "/static/shared/format.js";
+import {
+  posLabel, moneyLabel, rankLabel, roundLabel, salaryLabel, rolledLabel, rollSummary,
+  winnersLabel, effectStyle, SALARY_CHIME, FINISH_CHIME,
+} from "/static/shared/format.js";
 
 const $ = (id) => document.getElementById(id);
 const dice = createDice($("cube"));
@@ -116,12 +132,12 @@ $("mute").onclick = () => { $("mute").textContent = sound.toggleMute() ? "🔇" 
 
 /* ---- 状態 ---- */
 let ws = null, myName = "", myId = null, joined = false, retry = null;
-let state = null, lastSeq = null, firstState = true, shownPos = 0;
+let state = null, lastSeq = null, firstState = true;
 
 function setStatus(text, s) { $("status").textContent = text; $("dot").className = s || ""; }
 
 function showEntry(message) {
-  joined = false; myId = null; state = null; lastSeq = null; firstState = true; shownPos = 0;
+  joined = false; myId = null; state = null; lastSeq = null; firstState = true;
   clearTimeout(retry);
   $("game").style.display = "none";
   $("entry").style.display = "flex";
@@ -129,14 +145,21 @@ function showEntry(message) {
   $("notice").textContent = message || "";
 }
 
-// 表示は PC画面と同じ posLabel を使う。文言を2箇所で作らないための決まり。
-function showPos(player, bump) {
-  shownPos = player.pos;
+function bump(el) {
+  el.classList.remove("bump");
+  void el.offsetWidth;
+  el.classList.add("bump");
+}
+
+// 表示は PC画面と同じ format.js の関数を使う。文言を2箇所で作らないための決まり。
+function showPos(player, animate) {
   $("mypos").textContent = posLabel(player);
-  if (!bump) return;
-  $("mypos").classList.remove("bump");
-  void $("mypos").offsetWidth;
-  $("mypos").classList.add("bump");
+  if (animate) bump($("mypos"));
+}
+
+function showMoney(money, animate) {
+  $("mymoney").textContent = moneyLabel(money);
+  if (animate) bump($("mymoney"));
 }
 
 function me() {
@@ -149,6 +172,9 @@ function drawStatic() {
 
   // 演出の途中で止まっても、最後は必ずサーバーの値に戻す。ここがズレ防止の要。
   showPos(you, false);
+  showMoney(you.money, false);
+  $("myrank").textContent = s.phase === "waiting" ? "—" : `${rankLabel(you.rank)} / ${s.players.length}人`;
+  $("round").textContent = s.phase === "playing" ? roundLabel(s.round, s.rounds) : "";
 
   const myTurn = s.phase === "playing" && s.turn === myId;
   const cur = s.players.find((p) => p.id === s.turn);
@@ -157,13 +183,10 @@ function drawStatic() {
     $("msg").innerHTML = "<div>PC画面で「ゲーム開始」を<br>押してもらってください</div>";
     $("roll").disabled = true; $("roll").textContent = "かいし待ち";
   } else if (s.phase === "finished") {
-    const win = s.players.filter((p) => p.rank).sort((a, b) => a.rank - b.rank)[0];
-    $("msg").innerHTML = `<div><span class="big">ゲーム終了</span><br>優勝 ${win ? win.name : "—"}<br>` +
-      `あなた ${you.rank ? you.rank + "位" : "未ゴール"}</div>`;
+    const head = you.rank === 1 ? "あなたの優勝！" : "ゲーム終了";
+    $("msg").innerHTML = `<div><span class="big">${head}</span><br>優勝 ${winnersLabel(s.players) || "—"}<br>` +
+      `あなた ${rankLabel(you.rank)}　${moneyLabel(you.money)}</div>`;
     $("roll").disabled = true; $("roll").textContent = "おわり";
-  } else if (you.rank) {
-    $("msg").innerHTML = `<div><span class="big">${goalLabel(you.rank)}</span><br>ほかの人を待っています</div>`;
-    $("roll").disabled = true; $("roll").textContent = "ゴール済み";
   } else if (myTurn) {
     $("msg").innerHTML = '<div><span class="big">あなたのばんです</span></div>';
     $("roll").disabled = false; $("roll").textContent = "サイコロをふる";
@@ -178,10 +201,11 @@ function drawStatic() {
 }
 
 // 自分のマス目を1つずつ動かす。歩いている間は表示用に仮の値を使う。
-async function walkMe(you, to) {
-  await walk(shownPos, to, (pos, dir, i) => {
-    showPos({ ...you, pos, resting: false, rank: null }, true);
+function walkMe(from, steps, onPass) {
+  return walk(from, steps, state.size, (pos, dir, i) => {
+    showPos({ pos, resting: false }, true);
     sound.stepTone(dir, i);
+    if (dir > 0 && pos === 0) onPass();
   });
 }
 
@@ -211,22 +235,33 @@ async function apply(s) {
   await sleep(RESULT_MS);
 
   if (r.id === myId) {
-    await walkMe(you, r.land);
+    // 表示用の所持金。増えるたびに足していき、最後にサーバーの値で締める。
+    let money = r.before;
+    showMoney(money, false);
+    const onPass = () => {
+      money += s.salary;
+      showMoney(money, true);
+      $("msg").innerHTML = `<div><span class="big">${salaryLabel(s.salary)}</span></div>`;
+      sound.chime(SALARY_CHIME);
+    };
+
+    await walkMe(r.from, r.value, onPass);
     if (r.effect) {
       $("msg").innerHTML = `<div><span class="big">${r.effect}</span></div>`;
       sound.chime(effectStyle(s.board[r.land].kind).chime);
+      if (r.gain) { money += r.gain; showMoney(money, true); }
       await sleep(EFFECT_MS);
-      if (r.to !== r.land) await walkMe(you, r.to);
-    }
-    if (r.rank) {
-      $("msg").innerHTML = `<div><span class="big">${goalLabel(r.rank)}</span></div>`;
-      sound.chime(GOAL_CHIME, 0.13);
-      await sleep(RESULT_MS);
+      if (r.shift) await walkMe(r.land, r.shift, onPass);
     }
   } else {
     const lines = rollSummary(r);
     $("msg").innerHTML = `<div><span class="big">${lines[0]}</span><br>${lines.slice(1).join("<br>")}</div>`;
     await sleep(700);
+  }
+
+  if (s.phase === "finished") {
+    await sleep(RESULT_MS);
+    sound.chime(FINISH_CHIME, 0.13);
   }
 
   lastSeq = r.seq;

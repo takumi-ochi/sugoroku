@@ -5,8 +5,11 @@
 
     game = Game(rng=random.Random(0))
     player, _ = game.add_player("タロウ")
-    game.handle_host({"type": "start"})
+    game.handle_host({"type": "start", "rounds": 10})
     game.handle(player.id, {"type": "roll"})
+
+ゴールは無い。盤をぐるぐる回ってお金を集め、
+決めたターン数が終わった時点で所持金の多い人が勝つ。
 """
 
 from __future__ import annotations
@@ -24,6 +27,18 @@ WAITING = "waiting"    # 開始待ち
 PLAYING = "playing"
 FINISHED = "finished"
 
+DEFAULT_ROUNDS = 10    # ターン数の指定が無いとき
+MAX_ROUNDS = 50
+
+
+def parse_rounds(value: object, default: int = DEFAULT_ROUNDS) -> int:
+    """PC画面から来たターン数を 1〜MAX_ROUNDS に収める。読めなければ default。"""
+    try:
+        rounds = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(rounds, MAX_ROUNDS))
+
 
 @dataclass
 class Player:
@@ -31,12 +46,8 @@ class Player:
     name: str
     color: str
     pos: int = 0
+    money: int = board.START_MONEY
     resting: bool = False      # 次の番を休む
-    rank: int | None = None    # ゴールした順位。未ゴールは None
-
-    @property
-    def finished(self) -> bool:
-        return self.rank is not None
 
     def to_dict(self) -> dict:
         return {
@@ -44,8 +55,8 @@ class Player:
             "name": self.name,
             "color": self.color,
             "pos": self.pos,
+            "money": self.money,
             "resting": self.resting,
-            "rank": self.rank,
         }
 
 
@@ -56,6 +67,8 @@ class Game:
     order: list[str] = field(default_factory=list)   # 手番の順（参加順）
     phase: str = WAITING
     current: str | None = None                       # 今の手番のプレイヤーID
+    round: int = 0                                   # 今が何ターン目か（1始まり。開始前は0）
+    rounds: int = DEFAULT_ROUNDS                     # 全部で何ターン遊ぶか
     last_roll: dict | None = None                    # 直前の出目と移動の記録
     _seq: int = 0
     _rolls: int = 0                                  # サイコロを振った通し番号
@@ -68,14 +81,27 @@ class Game:
         差分ではなく毎回まるごと送る。表示がずれないのと、
         後から画面を開いた人にもそのまま使えるのが理由。
         """
+        ranks = self.ranks()
         return {
             "type": "state",
             "phase": self.phase,
-            "goal": board.GOAL,
+            "size": board.SIZE,
+            "salary": board.SALARY,
             "board": board.to_dict(),
             "turn": self.current,
+            "round": self.round,
+            "rounds": self.rounds,
             "last_roll": self.last_roll,
-            "players": [self.players[pid].to_dict() for pid in self.order],
+            "players": [
+                {**self.players[pid].to_dict(), "rank": ranks[pid]} for pid in self.order
+            ],
+        }
+
+    def ranks(self) -> dict[str, int]:
+        """所持金の多い順の順位。同じ額なら同じ順位（1位, 1位, 3位 のように飛ぶ）。"""
+        return {
+            pid: 1 + sum(1 for other in self.players.values() if other.money > p.money)
+            for pid, p in self.players.items()
         }
 
     def _broadcast(self) -> list[Event]:
@@ -110,6 +136,7 @@ class Game:
         if not self.order:
             self.phase = WAITING
             self.current = None
+            self.round = 0
             self.last_roll = None
         elif was_current:
             # 手番の人が抜けた。抜けた位置の「ひとつ前」から次を探す。
@@ -145,7 +172,7 @@ class Game:
         kind = message.get("type")
 
         if kind == "start":
-            return self.start()
+            return self.start(message.get("rounds"))
         if kind == "reset":
             return self.reset()
         if kind == "kick":
@@ -163,12 +190,15 @@ class Game:
 
     # ---- 進行 ----------------------------------------------------------
 
-    def start(self) -> list[Event]:
+    def start(self, rounds: object = None) -> list[Event]:
+        """ゲーム開始。rounds を省くと前回と同じターン数で遊ぶ。"""
         if not self.order:
             return []
+        self.rounds = parse_rounds(rounds, default=self.rounds)
         self._reset_players()
         self.phase = PLAYING
         self.current = self.order[0]
+        self.round = 1
         self.last_roll = None
         return self._broadcast()
 
@@ -176,14 +206,15 @@ class Game:
         self._reset_players()
         self.phase = WAITING
         self.current = None
+        self.round = 0
         self.last_roll = None
         return self._broadcast()
 
     def _reset_players(self) -> None:
         for player in self.players.values():
             player.pos = 0
+            player.money = board.START_MONEY
             player.resting = False
-            player.rank = None
 
     def _roll(self, player: Player) -> list[Event]:
         if self.phase != PLAYING or self.current != player.id:
@@ -191,15 +222,28 @@ class Game:
 
         value = self.rng.randint(1, 6)
         start = player.pos
-        player.pos = min(player.pos + value, board.GOAL)
+        before = player.money
+
+        salary = self._move(player, value)
         land = player.pos          # マスの効果を受ける前。ここまでを1マスずつ進む。
 
-        effect = None
-        if player.pos < board.GOAL:
-            effect = self._apply_square(player)
+        square = board.BOARD[land]
+        effect = square.label if square.kind not in ("start", "normal") else None
+        shift = 0                  # マスの効果で動いた歩数（戻るときは負）
+        gain = 0                   # マスの効果で増減した金額
 
-        if player.pos >= board.GOAL:
-            player.rank = sum(1 for p in self.players.values() if p.finished) + 1
+        if square.kind == "forward":
+            shift = square.value
+            salary += self._move(player, shift)
+        elif square.kind == "back":
+            shift = -square.value
+            self._move(player, shift)
+        elif square.kind == "rest":
+            player.resting = True
+        elif square.kind == "gain":
+            gain = self._earn(player, square.value)
+        elif square.kind == "lose":
+            gain = self._earn(player, -square.value)
 
         self._rolls += 1
         self.last_roll = {
@@ -210,51 +254,64 @@ class Game:
             "from": start,
             "land": land,
             "to": player.pos,
+            "shift": shift,
             "effect": effect,
-            "rank": player.rank,
+            "before": before,      # 振る前の所持金
+            "salary": salary,      # スタート通過でもらった合計
+            "gain": gain,          # マスの効果による増減（実際に動いた額）
+            "money": player.money,
+            "round": self.round,
         }
 
         self._advance(self.order.index(player.id))
         return self._broadcast()
 
-    def _apply_square(self, player: Player) -> str | None:
-        """止まったマスの効果を適用し、何が起きたかを返す。"""
-        square = board.BOARD[player.pos]
+    def _move(self, player: Player, steps: int) -> int:
+        """steps だけ動かす（負なら戻る）。盤は一周つながっている。
 
-        if square.kind == "forward":
-            player.pos = min(player.pos + square.value, board.GOAL)
-        elif square.kind == "back":
-            player.pos = max(player.pos - square.value, 0)
-        elif square.kind == "rest":
-            player.resting = True
-        else:
-            return None
+        前向きにスタートを越えた（ちょうど止まった場合も含む）回数だけ給料を払い、
+        その額を返す。戻ってスタートを越えても給料は出ない。
+        """
+        total = player.pos + steps
+        player.pos = total % board.SIZE
+        if steps <= 0:
+            return 0
+        return self._earn(player, (total // board.SIZE) * board.SALARY)
 
-        return square.label
+    def _earn(self, player: Player, amount: int) -> int:
+        """所持金を増減する。0円より下にはならない。実際に動いた額を返す。"""
+        after = max(player.money + amount, 0)
+        delta = after - player.money
+        player.money = after
+        return delta
 
     def _advance(self, from_index: int) -> None:
         """from_index の次から、番が回せる人を探す。
 
-        ゴール済みは飛ばす。一回休みの人は、休みを消化して飛ばす。
+        参加順の最後から先頭に戻ったら1ターン終わり。決めたターン数を
+        越えたらゲーム終了。一回休みの人は、休みを消化して飛ばす。
         """
         count = len(self.order)
         if count == 0:
-            self.phase = FINISHED if self.players else WAITING
+            self.phase = WAITING
             self.current = None
             return
 
         # 2周ぶん見る。1周目で休みを消化した人を2周目で拾えるようにするため
         # （残り1人が休みのときに手番が消えるのを防ぐ）。
         for step in range(1, count * 2 + 1):
-            candidate = self.players[self.order[(from_index + step) % count]]
-            if candidate.finished:
-                continue
+            index = from_index + step
+            if index > 0 and index % count == 0:
+                # 全員の番が一巡した
+                if self.round >= self.rounds:
+                    self.phase = FINISHED
+                    self.current = None
+                    return
+                self.round += 1
+
+            candidate = self.players[self.order[index % count]]
             if candidate.resting:
                 candidate.resting = False
                 continue
             self.current = candidate.id
             return
-
-        # 全員ゴール
-        self.phase = FINISHED
-        self.current = None
