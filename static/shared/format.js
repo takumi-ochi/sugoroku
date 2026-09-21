@@ -25,16 +25,6 @@ export function rankLabel(rank) {
   return `${rank}位`;
 }
 
-/** 何ターン目か。数字だけ（スマホの大きい表示用）。 */
-export function roundValue(round, rounds) {
-  return `${round} / ${rounds}`;
-}
-
-/** 何ターン目か。見出し付き。 */
-export function roundLabel(round, rounds) {
-  return `ターン ${roundValue(round, rounds)}`;
-}
-
 /** 何人中か（順位に添える）。 */
 export function playersLabel(count) {
   return `${count}人中`;
@@ -72,14 +62,66 @@ export function cardsLabel(count) {
   return `カード ${count}枚`;
 }
 
-/** 参加者一覧の1行に添える、位置と手札の枚数。持っていないときは位置だけ。 */
-export function statLabel(player) {
-  return player.cards ? `${posLabel(player)} / ${cardsLabel(player.cards)}` : posLabel(player);
+/** 画面の背景に使う階層。いま手番の人、いなければ最後に振った人、いなければ地上。 */
+export function viewLayer(state) {
+  const players = state.players || [];
+  const roller = state.last_roll ? players.find((p) => p.id === state.last_roll.id) : null;
+  const who = players.find((p) => p.id === state.turn) || roller;
+  return who && who.layer ? who.layer : 1;
+}
+
+/** 階層の表示。layer は 1 始まり、stages は state.stages（名前と印）。 */
+export function stageLabel(layer, stages) {
+  const s = stages && stages[layer - 1];
+  return s ? `${s.mark} ${s.name}` : "";
+}
+
+/** パーツの個数。持っていなければ空文字。 */
+export function partsCountLabel(count) {
+  return count ? `パーツ${count}` : "";
+}
+
+/** 参加者一覧の1行に添える、階層・位置・手札の枚数・パーツの個数。持っていないものは出さない。
+ *
+ * layer と stages が無ければ階層は出さない（演出中に位置だけ差し替えるときなど）。
+ */
+export function statLabel(player, stages) {
+  const parts = [];
+  const stage = player.layer ? stageLabel(player.layer, stages) : "";
+  if (stage) parts.push(stage);
+  parts.push(posLabel(player));
+  if (player.cards) parts.push(cardsLabel(player.cards));
+  const owned = partsCountLabel(player.parts);
+  if (owned) parts.push(owned);
+  return parts.join(" / ");
 }
 
 /** カードをひいたときの表示。中身が見えるのは持ち主の画面だけ。 */
 export function drewLabel(card) {
-  return `カードをひいた  ${card.label}`;
+  return card.kind === "part" ? `パーツをひいた  ${card.label}` : `カードをひいた  ${card.label}`;
+}
+
+/** 天国へ旅立った（クリアした）ときの表示。 */
+export function goalLabel(name) {
+  return `${name} が天国へ旅立った！`;
+}
+
+/** 階層を登ったとき（最上階なら天国へ旅立ったとき）の表示。 */
+export function climbLabel(climb, stages) {
+  if (climb.heaven) return goalLabel(climb.name);
+  return `${climb.name} が ${stageLabel(climb.layer, stages)} へ登った！`;
+}
+
+/** 「登る」ボタンの文言。最上階では天国へ旅立つ。 */
+export function climbButtonLabel(layer, stages) {
+  if (layer >= stages.length) return "天国へ旅立つ";
+  return `${stageLabel(layer + 1, stages)} へ登る`;
+}
+
+/** パーツが何種類そろっているか（そろっていれば「そろった」）。 */
+export function partsProgressLabel(parts) {
+  const have = Object.values(parts).filter((n) => n > 0).length;
+  return have === Object.keys(parts).length ? "パーツがそろった！" : `パーツ ${have} / ${Object.keys(parts).length}`;
 }
 
 /** おまもりで支払いを無効にしたときの表示。 */
@@ -147,6 +189,11 @@ export function cardStyle(kind) {
   return CARD[kind] || { cls: "", mark: "🂠" };
 }
 
+/** パーツの印。右翼・左翼・エンジンの見分けに使う。 */
+export const PART_MARK = { right: "🔷", left: "🔶", engine: "🔥" };
+
+export const CLIMB_CHIME = [523, 784, 1047, 1568];   // 階層を登った
+export const GOAL_CHIME = [784, 1047, 1319, 1568, 2093];   // ゴールした
 export const SALARY_CHIME = [880, 1175];
 export const FINISH_CHIME = [660, 880, 1320];
 export const CARD_CHIME = [740, 988, 1319];     // カードを使った

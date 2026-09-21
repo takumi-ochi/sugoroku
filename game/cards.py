@@ -23,6 +23,7 @@ class Card:
     value: int = 0     # advance は足す歩数、double はサイコロの数
     passive: bool = False
     """持っているだけで自動で発動する。使うボタンは出ない。"""
+    part: str = ""     # kind が part のときだけ。right / left / engine
 
     def to_dict(self) -> dict:
         return {
@@ -32,6 +33,7 @@ class Card:
             "short": self.short,
             "value": self.value,
             "passive": self.passive,
+            "part": self.part,
         }
 
 
@@ -67,6 +69,19 @@ GUARD = Card(
     passive=True,
 )
 
+# 階層を登るためのパーツ。3種類そろえて使うと1階層上に登れる（game/logic.py の _climb）。
+# 手札には入らない。上限にも数えず、捨てることもできない（Player.parts に数だけ持つ）。
+PART_RIGHT = Card("part", "右翼", "右翼のパーツ。右翼・左翼・エンジンが1つずつそろうと、1階層上に登れる",
+                  short="3つそろえて登る", part="right")
+PART_LEFT = Card("part", "左翼", "左翼のパーツ。右翼・左翼・エンジンが1つずつそろうと、1階層上に登れる",
+                 short="3つそろえて登る", part="left")
+PART_ENGINE = Card("part", "エンジン", "エンジンのパーツ。右翼・左翼・エンジンが1つずつそろうと、1階層上に登れる",
+                   short="3つそろえて登る", part="engine")
+PARTS = (PART_RIGHT, PART_LEFT, PART_ENGINE)
+PART_IDS = tuple(card.part for card in PARTS)
+
+PART_COPIES = 3   # 山札に各パーツを何枚入れるか。増やすほどパーツが出やすく、登りやすい
+
 # 山札は減らない（引いても山から消えない）。ここの重複がそのまま出やすさになる。
 DECK: list[Card] = [
     ADVANCE_1, ADVANCE_1,
@@ -74,6 +89,7 @@ DECK: list[Card] = [
     ADVANCE_3,
     DOUBLE, DOUBLE,
     GUARD, GUARD, GUARD,
+    *[card for card in PARTS for _ in range(PART_COPIES)],
 ]
 
 

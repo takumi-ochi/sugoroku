@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>すごろく — 親機</title>
 <link rel="stylesheet" href="/static/shared/dice.css">
-<link rel="stylesheet" href="/static/shared/space.css">
+<link rel="stylesheet" href="/static/shared/stages.css">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   /* display を持つ要素にも hidden 属性を効かせる */
   [hidden] { display: none !important; }
   body {
-    margin: 0; height: 100vh; overflow: hidden; color: #eef0f5;   /* 背景は shared/space.css（body には background を付けない） */
+    margin: 0; height: 100vh; overflow: hidden; color: #eef0f5;   /* 背景は shared/stages.css（body には background を付けない） */
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Yu Gothic UI", sans-serif;
     display: flex; flex-direction: column;
   }
@@ -79,6 +79,13 @@
   .sq .no { font-size: 11px; color: #5c6478; font-variant-numeric: tabular-nums; }
   .sq .lb { font-size: 10px; line-height: 1.25; margin-top: 1px; font-weight: 600; }
   .sq .tokens { margin-top: auto; display: flex; flex-wrap: wrap; gap: 3px; }
+  /* マスが多い盤（41マス以上）は、1マスが小さくなるので文字とコマも小さくする */
+  #board.dense { gap: 5px; }
+  #board.dense .sq { padding: 3px 4px; }
+  #board.dense .sq .no { font-size: 9px; }
+  #board.dense .sq .lb { font-size: 9px; line-height: 1.2; }
+  #board.dense .sq .tokens { gap: 2px; }
+  #board.dense .tk { width: 16px; height: 16px; font-size: 9px; }
 
   /* 輪の内側。手番とサイコロを置く */
   #center {
@@ -93,6 +100,9 @@
     box-shadow: 0 0 0 2px #0f1117;
   }
   .tk.rest { opacity: .4; }
+  /* 階層。地上は縁なし、天空は青、宇宙は金 */
+  .tk[data-l="2"] { box-shadow: 0 0 0 2px #0f1117, 0 0 0 4px #79b8ff; }
+  .tk[data-l="3"] { box-shadow: 0 0 0 2px #0f1117, 0 0 0 4px #ffd54f, 0 0 10px 3px rgba(255, 213, 79, .55); }
   .tk.hop { animation: hop .18s ease; }
   @keyframes hop { 0% { transform: translateY(0) scale(1) } 50% { transform: translateY(-9px) scale(1.15) } 100% { transform: translateY(0) scale(1) } }
 
@@ -102,6 +112,8 @@
   .sq.forward .lb { color: #81c784; }
   .sq.back    { background: rgba(42,29,20,.78); border-color: #6b4220; }
   .sq.back .lb { color: #ff9d5c; }
+  .sq.half    { background: rgba(38,32,10,.8); border-color: #a8862a; }
+  .sq.half .lb { color: #ffe08a; }
   .sq.rest    { background: rgba(31,26,43,.78); border-color: #4f3d73; }
   .sq.rest .lb { color: #ba8cff; }
   .sq.gain    { background: rgba(43,36,19,.78); border-color: #6b5a20; }
@@ -151,12 +163,6 @@
   }
   .row .kick:hover { background: #f87171; border-color: #f87171; color: #14161c; }
 
-  #setup { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #8b93a7; flex: none; }
-  #rounds {
-    width: 72px; padding: 8px; font-size: 16px; font-weight: 700; text-align: center;
-    border-radius: 8px; border: 1px solid #3a4050; background: rgba(23,26,34,.78); color: #eef0f5; font-family: inherit;
-  }
-  #rounds:disabled { color: #5c6478; }
 
   #ctrl { display: flex; gap: 8px; flex: none; }
   #ctrl button { flex: 1; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 10px; border: none; cursor: pointer; font-family: inherit; }
@@ -165,6 +171,13 @@
   #finish { background: none; border: 1px solid #6b5a20 !important; color: #ffd54f; }
   #finish:hover { background: #241f14; }
   #reset { background: none; border: 1px solid #3a4050 !important; color: #8b93a7; }
+
+  /* 明るい背景（地上・天空）でも読めるように、背景に直接乗るものへ暗い下地を敷く */
+  #ctrl button { background: rgba(23, 26, 34, .85); }
+  #start { background: #4dd0e1 !important; }
+  #start:disabled { background: #262a35 !important; }
+  #right { background: rgba(15, 17, 23, .6); border-radius: 12px; padding: 8px 6px; }
+  #center .dir { background: rgba(15, 17, 23, .55); border-radius: 999px; padding: 4px 12px; color: #aab3c5; }
 
   #empty { color: #5c6478; font-size: 14px; text-align: center; padding: 18px; }
 
@@ -177,7 +190,8 @@
   }
 </style>
 </head>
-<body>
+<body data-stage="1">
+  <div id="stagebg" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
   <div id="sndhint" hidden>🔈 画面のどこかをクリックすると音が鳴ります</div>
 
   <section id="lobby">
@@ -217,11 +231,6 @@
     <aside>
       <div id="list"><div id="empty">まだ誰も参加していません</div></div>
 
-      <div id="setup">
-        <label for="rounds">遊ぶターン数</label>
-        <input id="rounds" type="number" min="1" max="50" value="10">
-        <span>ターン</span>
-      </div>
       <div id="ctrl">
         <button id="start" disabled>ゲーム開始</button>
         <button id="finish" hidden>ここで終了</button>
@@ -244,8 +253,9 @@ import * as sound from "/static/shared/sound.js";
 import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
 import { ringSize, ringLayout } from "/static/shared/ring.js";
 import {
-  moneyLabel, deltaLabel, rankLabel, roundLabel, salaryLabel, halfwayLabel, moveLabel,
+  moneyLabel, deltaLabel, rankLabel, salaryLabel, halfwayLabel, moveLabel,
   rolledLabel, byRank, winnersLabel, effectStyle, statLabel, guardLabel, armedLabel, overLabel,
+  stageLabel, viewLayer, climbLabel, goalLabel, CLIMB_CHIME, GOAL_CHIME,
   SALARY_CHIME, FINISH_CHIME, GUARD_CHIME, HALFWAY_CHIME,
 } from "/static/shared/format.js";
 
@@ -284,30 +294,46 @@ $("mute").onclick = () => { $("mute").textContent = sound.toggleMute() ? "🔇" 
 sound.armEnable((ready) => { $("sndhint").hidden = ready || sound.isMuted(); });
 
 /* ---- 盤面 ---- */
-let ws = null, state = null, shown = new Map(), lastSeq = null, firstState = true, animating = false;
+let ws = null, state = null, shown = new Map(), lastSeq = null, lastClimb = null, firstState = true, animating = false;
 
 function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
 
 // マスを外周に輪として並べ、内側に手番とサイコロ（#center）を置く。
-function drawBoard(s) {
+// 盤は階層ごとに違う。いま盤に出している階層（0 = まだ描いていない）。
+let viewL = 0;
+
+function boardOf(s, layer) { return s.boards[layer - 1]; }
+
+function drawBoard(s, layer) {
   const board = $("board"), center = $("center");
-  const { cols, rows } = ringSize(s.board.length);
-  const cells = ringLayout(s.board.length);
+  const info = boardOf(s, layer), squares = info.squares;
+  board.classList.toggle("dense", squares.length > 40);
+  const { cols, rows } = ringSize(squares.length);
+  const cells = ringLayout(squares.length);
   board.querySelectorAll(".sq").forEach((el) => el.remove());
   board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   board.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
   center.style.gridArea = `2 / 2 / ${rows} / ${cols}`;
 
-  s.board.forEach((sq, i) => {
+  squares.forEach((sq, i) => {
     const el = document.createElement("div");
     el.className = "sq " + sq.kind;
     el.id = "sq" + i;
     el.style.gridRow = cells[i].row;
     el.style.gridColumn = cells[i].col;
-    const label = sq.kind === "start" ? `${sq.label}<br>通過 ${deltaLabel(s.salary)}` : sq.label;
+    const label = sq.kind === "start" ? `${sq.label}<br>通過 ${deltaLabel(info.salary)}` : sq.label;
     el.innerHTML = `<div class="no">${i}</div><div class="lb">${label || ""}</div><div class="tokens"></div>`;
     board.append(el);
   });
+}
+
+// 盤と背景を階層に合わせる。人は自分がいる階層の盤にしか出ない。
+function setView(layer) {
+  document.body.dataset.stage = layer;
+  if (layer === viewL) return;
+  viewL = layer;
+  drawBoard(state, layer);
+  drawTokens();
 }
 
 function drawTokens(hopId) {
@@ -315,13 +341,15 @@ function drawTokens(hopId) {
   document.querySelectorAll(".tokens").forEach((t) => (t.innerHTML = ""));
   document.querySelectorAll(".sq.here").forEach((e) => e.classList.remove("here"));
   for (const p of state.players) {
+    if (p.layer !== viewL) continue;      // 別の階層の人は、この盤には出ない
     const cell = $("sq" + (shown.has(p.id) ? shown.get(p.id) : p.pos));
     if (!cell) continue;
     const tk = document.createElement("div");
     tk.className = "tk" + (p.resting ? " rest" : "") + (p.id === hopId ? " hop" : "");
     tk.style.setProperty("--c", p.color);
     tk.textContent = p.name.slice(0, 1);
-    tk.title = p.name;
+    tk.dataset.l = p.layer;              // 階層ごとに縁の色を変える
+    tk.title = `${p.name}（${stageLabel(p.layer, state.stages)}）`;
     cell.querySelector(".tokens").append(tk);
     if (p.id === state.turn && !animating) cell.classList.add("here");
   }
@@ -339,12 +367,14 @@ function flashSquare(pos, color) {
 function drawPanel() {
   const s = state, cur = s.players.find((p) => p.id === s.turn), t = $("turn");
   if (s.phase === "waiting") {
-    t.textContent = s.players.length ? "ターン数を決めて「ゲーム開始」" : "参加者を待っています";
+    t.textContent = s.players.length ? "「ゲーム開始」を押してください" : "参加者を待っています";
     t.style.removeProperty("--c");
   } else if (s.phase === "finished") {
     const win = s.players.find((p) => p.rank === 1);
+    const clear = s.cleared && s.players.find((p) => p.id === s.cleared);
+    const goal = clear ? goalLabel(clear.name) : "ゲーム終了";
     t.innerHTML = win
-      ? `<div class="rd">ゲーム終了</div>優勝 <b>${winnersLabel(s.players)}</b>　${moneyLabel(win.money)}`
+      ? `<div class="rd">${goal}</div>優勝 <b>${winnersLabel(s.players)}</b>　${moneyLabel(win.money)}`
       : "ゲーム終了";
     t.style.setProperty("--c", win ? win.color : "#eef0f5");
   } else if (cur) {
@@ -352,7 +382,7 @@ function drawPanel() {
     const extra = cur.cards > s.card_limit
       ? overLabel(cur.cards - s.card_limit)
       : armedLabel(cur);
-    t.innerHTML = `<div class="rd">${roundLabel(s.round, s.rounds)}</div><b>${cur.name}</b> のばん`
+    t.innerHTML = `<div class="rd">${stageLabel(cur.layer, s.stages)}</div><b>${cur.name}</b> のばん`
       + (extra ? `<div class="ex">${extra}</div>` : "");
     t.style.setProperty("--c", cur.color);
   }
@@ -366,7 +396,7 @@ function drawPanel() {
     const rank = s.phase === "waiting" ? "—" : rankLabel(p.rank);
     row.innerHTML =
       `<span class="rk${s.phase !== "waiting" && p.rank === 1 ? " top" : ""}">${rank}</span>` +
-      `<div class="info"><span class="nm">${p.name}</span><span class="st">${statLabel(p)}</span></div>` +
+      `<div class="info"><span class="nm">${p.name}</span><span class="st">${statLabel(p, s.stages)}</span></div>` +
       `<span class="mn">${moneyLabel(p.money)}</span>`;
     const kick = document.createElement("button");
     kick.className = "kick"; kick.textContent = "切断";
@@ -382,7 +412,7 @@ function drawPanel() {
 
   // 操作パネルは1組だけ持ち、開始前はロビーへ、始まったら右側へ移す（二重に持たない）
   if (waiting) {
-    $("lobbyctrl").append($("setup"), $("ctrl"));
+    $("lobbyctrl").append($("ctrl"));
     $("lobby").append($("right"));
     $("chips").innerHTML = s.players.length ? "" : `<div class="chip">まだ誰も参加していません</div>`;
     for (const p of s.players) {
@@ -393,17 +423,15 @@ function drawPanel() {
       $("chips").append(chip);
     }
   } else {
-    document.querySelector("aside").append($("setup"), $("ctrl"));
+    document.querySelector("aside").append($("ctrl"));
     $("rail").append($("right"));
   }
 
   $("start").hidden = playing;
   $("finish").hidden = !playing;
   $("showqr").hidden = s.phase !== "finished";
-  $("setup").hidden = playing;
   $("start").disabled = !s.players.length;
   $("start").textContent = s.phase === "finished" ? "もう一度あそぶ" : "ゲーム開始";
-  if (document.activeElement !== $("rounds")) $("rounds").value = s.rounds;
 }
 
 // 演出中だけ、その人の行の位置と金額を書き換える。
@@ -411,7 +439,8 @@ function stepRow(pid, pos) {
   const row = document.getElementById("row" + pid);
   if (!row) return;
   const p = state.players.find((x) => x.id === pid);
-  row.querySelector(".st").textContent = statLabel({ pos, cards: p ? p.cards : 0 });
+  row.querySelector(".st").textContent = statLabel(
+    { pos, cards: p ? p.cards : 0, layer: p ? p.layer : 0, parts: p ? p.parts : 0 }, state.stages);
 }
 
 function stepMoney(pid, money) {
@@ -425,28 +454,44 @@ function stepMoney(pid, money) {
 }
 
 async function walkToken(pid, steps, onPass, onHalf) {
-  const to = await walk(shown.get(pid), steps, state.size, (pos, dir, i) => {
+  const info = boardOf(state, viewL);     // いま盤に出している階層（演出中は振った人の階層）
+  const to = await walk(shown.get(pid), steps, info.size, (pos, dir, i) => {
     shown.set(pid, pos);
     drawTokens(pid);
     stepRow(pid, pos);
     sound.stepTone(dir, i);
     if (dir > 0 && pos === 0) onPass();
-    if (dir > 0 && pos === state.half_pos) onHalf();
+    if (dir > 0 && pos === info.half_pos) onHalf();
   });
   shown.set(pid, to);
+}
+
+// 誰かが階層を登ったら、全員に見えるように知らせる（新しい通し番号のときだけ）
+function announceClimb(s) {
+  const c = s.last_climb;
+  if (!c || c.seq === lastClimb) { if (!c) lastClimb = null; return; }
+  const first = lastClimb === null && firstState;   // 途中から開いたときは鳴らさない
+  lastClimb = c.seq;
+  if (first) return;
+  $("ef").textContent = climbLabel(c, s.stages);
+  $("ef").className = c.heaven ? "gn" : "cd";
+  sound.chime(c.heaven ? GOAL_CHIME : CLIMB_CHIME, 0.13);
 }
 
 async function apply(s) {
   const first = state === null;
   state = s;
+  announceClimb(s);
   sound.setBgm(s.phase === "playing");        // BGMは遊んでいる間だけ
   if (s.phase !== "finished") showQR(false);   // 次のゲームが始まったら引っ込める
-  if (first) drawBoard(s);
 
   const r = s.last_roll;
   // 最初の1回は演出しない（再読み込みや途中参加）。以降は出目が変わるたびに演出する。
   const animate = r && !firstState && r.seq !== lastSeq;
   firstState = false;
+
+  // 盤と背景は、演出中は振った人の階層、それ以外は手番の人の階層
+  setView(animate ? r.layer : viewLayer(s));
 
   // 動かす本人以外はサーバーの位置に合わせる。いなくなった人は消す。
   for (const p of s.players) if (!animate || p.id !== r.id) shown.set(p.id, p.pos);
@@ -480,21 +525,22 @@ async function apply(s) {
 
   // 表示用の所持金。スタート通過やマスの効果のたびに足していき、最後にサーバーの値で締める。
   let money = r.before;
+  const info = boardOf(s, r.layer);        // 振った人がいた階層の給料と半周ボーナス
   const onPass = () => {
-    money += s.salary;
+    money += info.salary;
     stepMoney(r.id, money);
-    $("ef").textContent = salaryLabel(s.salary);
+    $("ef").textContent = salaryLabel(info.salary);
     $("ef").className = "gn";
     flashSquare(0, "#4dd0e1");
     sound.chime(SALARY_CHIME);
   };
   // 半分の位置はぴったり止まらなくても通過するだけでもらえる。歩いている途中で判定する。
   const onHalf = () => {
-    money += s.half_bonus;
+    money += info.half_bonus;
     stepMoney(r.id, money);
-    $("ef").textContent = halfwayLabel(s.half_bonus);
+    $("ef").textContent = halfwayLabel(info.half_bonus);
     $("ef").className = "gn";
-    flashSquare(s.half_pos, "#79b8ff");
+    flashSquare(info.half_pos, "#79b8ff");
     sound.chime(HALFWAY_CHIME);
   };
 
@@ -502,7 +548,7 @@ async function apply(s) {
   await walkToken(r.id, r.value, onPass, onHalf);
 
   if (r.effect) {
-    const style = effectStyle(s.board[r.land].kind);
+    const style = effectStyle(info.squares[r.land].kind);
     $("ef").textContent = r.effect;
     $("ef").className = style.cls;
     flashSquare(r.land, style.color);
@@ -532,13 +578,14 @@ async function apply(s) {
   lastSeq = r.seq;
   animating = false;
   // 最後は必ずサーバーの状態で描き直す。ここで手番と順位が更新される。
+  setView(viewLayer(s));
   drawPanel();
   drawTokens();
 }
 
 const queue = createQueue(apply);
 
-$("start").onclick = () => { sound.enable(); send({ type: "start", rounds: Number($("rounds").value) }); };
+$("start").onclick = () => { sound.enable(); send({ type: "start" }); };
 $("finish").onclick = () => {
   if (confirm("ここでゲームを終了して、いまの所持金で順位を決めますか？")) send({ type: "finish" });
 };

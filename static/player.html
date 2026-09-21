@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>すごろく</title>
 <link rel="stylesheet" href="/static/shared/dice.css">
+<link rel="stylesheet" href="/static/shared/stages.css">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -14,7 +15,7 @@
   body {
     margin: 0; height: 100dvh; display: flex; flex-direction: column;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    background: #14161c; color: #eef0f5;
+    color: #eef0f5;   /* 背景は shared/stages.css（body には background を付けない） */
     font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
     overscroll-behavior: none; user-select: none;
   }
@@ -30,6 +31,11 @@
     margin-left: auto; background: none; border: 1px solid #3a4050; color: #9aa3b5;
     border-radius: 9px; font-size: 16px; padding: 5px 9px; width: auto; line-height: 1;
   }
+  #rulesbtn {
+    margin-left: auto; background: none; border: 1px solid #3a4050; color: #9aa3b5;
+    border-radius: 9px; font-size: 13px; padding: 6px 11px; width: auto; line-height: 1;
+  }
+  #rulesbtn:not([hidden]) + #mute { margin-left: 0; }
   main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px 18px; overflow-y: auto; }
 
   /* ---- 名前入力 ---- */
@@ -56,10 +62,10 @@
   #who { font-size: 13px; color: #9aa3b5; }
   #who b { color: var(--me, #fff); font-size: 17px; }
 
-  /* 所持金がこの画面の主役。順位とターンはその次に大きく出す */
+  /* 所持金がこの画面の主役。順位と階層はその次に大きく出す */
   #wallet {
     width: 100%; text-align: center; padding: 14px 12px 16px; border-radius: 16px;
-    background: #1c1f28; border: 1px solid #2d3341;
+    background: rgba(28,31,40,.8); border: 1px solid #2d3341;
   }
   #wallet .lb { font-size: 12px; color: #9aa3b5; letter-spacing: .12em; }
   #mymoney {
@@ -72,15 +78,13 @@
   #stats { display: flex; gap: 10px; width: 100%; }
   .stat {
     flex: 1; padding: 9px 12px 10px; border-radius: 13px;
-    background: #1c1f28; border: 1px solid #262a35; text-align: center;
+    background: rgba(28,31,40,.8); border: 1px solid #262a35; text-align: center;
   }
   .stat .lb { font-size: 11px; color: #9aa3b5; letter-spacing: .12em; }
   .stat b { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .stat span { font-size: 12px; color: #9aa3b5; margin-left: 5px; }
   #rankbox.top { border-color: #6b5a20; background: #241f14; }
   #rankbox.top b { color: #ffd54f; }
-  .bar { height: 4px; border-radius: 999px; background: #2d3341; margin-top: 7px; overflow: hidden; }
-  .bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--me, #4dd0e1); transition: width .3s ease; }
 
   #posline { font-size: 13px; color: #9aa3b5; font-variant-numeric: tabular-nums; }
   #mypos { display: inline-block; color: #eef0f5; font-weight: 700; }
@@ -99,16 +103,12 @@
   #roll:disabled:active { transform: none; }
 
   /* ---- 開始・終了（スマホからも操作できる） ---- */
-  #roundbox { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #9aa3b5; }
-  #rounds {
-    width: 78px; padding: 10px; font-size: 16px; font-weight: 700; text-align: center;
-  }
   #gamestart { background: #4dd0e1; color: #06202b; }
   #gamestart:disabled { background: #1c1f28; color: #4a5164; }
 
   #foot { display: flex; gap: 10px; width: 100%; }
   #foot button {
-    background: none; border: 1px solid #3a4050; color: #9aa3b5;
+    background: rgba(23,26,34,.85); border: 1px solid #3a4050; color: #9aa3b5;
     font-size: 14px; font-weight: 500; padding: 11px 14px;
   }
   #gameend { border-color: #4a3f1e !important; color: #ffd54f !important; }
@@ -135,7 +135,7 @@
   }
 
   #handbox {
-    width: 100%; background: #171a22; border: 1px solid #262a35;
+    width: 100%; background: rgba(23,26,34,.8); border: 1px solid #262a35;
     border-radius: 16px; padding: 10px 11px 12px;
   }
   #handhead { display: flex; align-items: baseline; margin-bottom: 9px; }
@@ -179,6 +179,47 @@
   .card.drop .tag { background: #ff9d5c; color: #2a1d14; }
   .card.pick { outline: 2px solid #4dd0e1; outline-offset: 2px; }
 
+  /* ルールのポップアップ。画面の中央に出して、中だけスクロールする */
+  #rules { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 18px; }
+  #rulesbg { position: absolute; inset: 0; background: rgba(8, 10, 14, .78); }
+  #rulesbox {
+    position: relative; width: 100%; max-width: 420px; max-height: 84dvh; display: flex; flex-direction: column;
+    background: #1c1f28; border: 1px solid #333846; border-radius: 18px; text-shadow: none;
+    box-shadow: 0 20px 60px -10px #000;
+  }
+  #ruleshead { display: flex; align-items: center; padding: 14px 16px 12px; border-bottom: 1px solid #2d3341; }
+  #rulesttl { font-size: 17px; font-weight: 800; }
+  #rulesx {
+    margin-left: auto; background: none; border: 1px solid #3a4050; color: #9aa3b5;
+    border-radius: 9px; font-size: 14px; padding: 6px 12px; width: auto; line-height: 1;
+  }
+  #rulesbody { overflow-y: auto; padding: 6px 16px 18px; -webkit-overflow-scrolling: touch; }
+  #rulesbody h3 { margin: 16px 0 6px; font-size: 14px; color: #4dd0e1; letter-spacing: .06em; }
+  #rulesbody ul { margin: 0; padding-left: 18px; }
+  #rulesbody li { font-size: 13.5px; line-height: 1.7; color: #d5dbe8; margin-bottom: 3px; }
+
+  /* 階層とパーツ。3種類そろうと登れる */
+  #partsbox {
+    width: 100%; background: rgba(23,26,34,.8); border: 1px solid #262a35;
+    border-radius: 16px; padding: 10px 11px 12px; display: flex; flex-direction: column; gap: 9px;
+  }
+  #partshead { display: flex; align-items: baseline; }
+  #partslb { font-size: 11px; color: #9aa3b5; letter-spacing: .12em; }
+  #partsprog { margin-left: auto; font-size: 12px; font-weight: 700; color: #9aa3b5; }
+  #partsprog.ok { color: #4dd0e1; }
+  #parts { display: flex; gap: 8px; }
+  .part {
+    flex: 1 1 0; min-width: 0; text-align: center; padding: 8px 4px; border-radius: 12px;
+    background: #12161d; border: 1px dashed #333846; color: #5c6478;
+    display: flex; flex-direction: column; gap: 2px; font-size: 12px; font-weight: 700;
+  }
+  .part .mk { font-size: 20px; line-height: 1.2; filter: grayscale(1); opacity: .45; }
+  .part.have { background: #14202e; border: 1px solid #2f5a86; color: #a8d5ff; }
+  .part.have .mk { filter: none; opacity: 1; }
+  #partsnote { font-size: 11px; color: #7f889b; text-align: center; line-height: 1.5; }
+  #climb { background: #ffd54f; color: #2b2413; box-shadow: 0 8px 30px -8px #ffd54f; }
+  #climb:disabled { background: #1c1f28; color: #4a5164; box-shadow: none; }
+
   /* 押したカードの説明。画面の下から出す（並びを動かさないため） */
   #sheet { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; }
   #sheetbg { position: absolute; inset: 0; background: rgba(8, 10, 14, .66); }
@@ -201,9 +242,11 @@
   }
 </style>
 </head>
-<body>
+<body data-stage="1">
+  <div id="stagebg" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
   <header>
     <span id="dot"></span><span id="status">接続中…</span>
+    <button id="rulesbtn" hidden>📖 ルール</button>
     <button id="mute" title="音のオン/オフ">🔊</button>
     <div id="dicebox" hidden>
       <div id="dicerow">
@@ -232,10 +275,9 @@
           <div class="lb">順位</div>
           <div><b id="myrank">—</b><span id="ofplayers"></span></div>
         </div>
-        <div class="stat" id="turnbox">
-          <div class="lb">ターン</div>
-          <div><b id="myround">—</b></div>
-          <div class="bar"><i id="bar"></i></div>
+        <div class="stat" id="stagebox">
+          <div class="lb">階層</div>
+          <div><b id="mystage">—</b></div>
         </div>
       </div>
 
@@ -253,11 +295,16 @@
         <div id="hand"></div>
       </div>
 
-      <div id="roundbox" hidden>
-        <label for="rounds">遊ぶターン数</label>
-        <input id="rounds" type="number" min="1" max="50" value="10">
-        <span>ターン</span>
+      <div id="partsbox">
+        <div id="partshead">
+          <span id="partslb">パーツ</span>
+          <span id="partsprog"></span>
+        </div>
+        <div id="parts"></div>
+        <div id="partsnote"></div>
+        <button id="climb" hidden></button>
       </div>
+
       <button id="gamestart" hidden>ゲーム開始</button>
 
       <div id="foot">
@@ -266,6 +313,17 @@
       </div>
     </div>
   </main>
+
+  <div id="rules" hidden>
+    <div id="rulesbg"></div>
+    <div id="rulesbox" role="dialog" aria-modal="true" aria-labelledby="rulesttl">
+      <div id="ruleshead">
+        <span id="rulesttl">ゲームのルール</span>
+        <button id="rulesx">とじる</button>
+      </div>
+      <div id="rulesbody"></div>
+    </div>
+  </div>
 
   <div id="sheet" hidden>
     <div id="sheetbg"></div>
@@ -285,10 +343,13 @@
 import { createDice } from "/static/shared/dice.js";
 import * as sound from "/static/shared/sound.js";
 import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
+import { rulesSections } from "/static/shared/rules.js";
 import {
-  posLabel, moneyLabel, rankLabel, roundValue, playersLabel, salaryLabel, halfwayLabel,
+  posLabel, moneyLabel, rankLabel, playersLabel, salaryLabel, halfwayLabel,
   rolledLabel, rollSummary, winnersLabel, effectStyle, cardStyle, drewLabel, guardLabel,
   armedLabel, overLabel,
+  stageLabel, goalLabel, climbButtonLabel, partsProgressLabel, PART_MARK,
+  CLIMB_CHIME, GOAL_CHIME,
   SALARY_CHIME, FINISH_CHIME, CARD_CHIME, GUARD_CHIME, HALFWAY_CHIME,
 } from "/static/shared/format.js";
 
@@ -305,14 +366,16 @@ sound.armEnable((ready) => { $("sndhint").hidden = ready || sound.isMuted(); });
 
 /* ---- 状態 ---- */
 let ws = null, myName = "", myId = null, joined = false, retry = null;
-let state = null, lastSeq = null, firstState = true;
+let state = null, lastSeq = null, lastClimb = null, firstState = true;
 let picked = null;   // 説明を開いているカードの uid
 
 function setStatus(text, s) { $("status").textContent = text; $("dot").className = s || ""; }
 
 function showEntry(message) {
-  joined = false; myId = null; state = null; lastSeq = null; firstState = true; picked = null;
+  joined = false; myId = null; state = null; lastSeq = null; lastClimb = null; firstState = true; picked = null;
   $("sheet").hidden = true;
+  $("rules").hidden = true;
+  $("rulesbtn").hidden = true;
   clearTimeout(retry);
   $("game").style.display = "none";
   $("dicebox").hidden = true;
@@ -406,6 +469,38 @@ function drawHand() {
   $("armed").textContent = armed;
 }
 
+/* ---- パーツ ----
+ * 何を何個持っているかは state.you.parts（自分の画面にしか届かない）。
+ * 他の人には players[].parts（個数だけ）が届く。
+ */
+function drawParts() {
+  const you = me(), mine = state.you;
+  if (!you || !mine) return;
+  const top = you.layer >= state.stages.length;   // 最上階では登る代わりに天国へ旅立つ
+
+  $("parts").innerHTML = "";
+  for (const kind of state.part_kinds) {
+    const n = mine.parts[kind.id] || 0;
+    const el = document.createElement("div");
+    el.className = "part" + (n ? " have" : "");
+    el.innerHTML = `<span class="mk">${PART_MARK[kind.id] || "◆"}</span><span>${kind.label}${n > 1 ? ` ×${n}` : ""}</span>`;
+    $("parts").append(el);
+  }
+
+  $("partsprog").textContent = partsProgressLabel(mine.parts);
+  $("partsprog").classList.toggle("ok", mine.can_climb);
+  $("partsnote").textContent = top
+    ? "最上階です。3つそろえて天国へ旅立てばクリア！"
+    : "カードマスでもらえます。3つそろうと1階層上へ登れます";
+
+  const playing = state.phase === "playing";
+  $("climb").hidden = !mine.can_climb || !playing;
+  $("climb").disabled = !myTurn();
+  $("climb").textContent = myTurn()
+    ? climbButtonLabel(you.layer, state.stages)
+    : (top ? "自分の番になったら旅立てます" : "自分の番になったら登れます");
+}
+
 function openSheet(uid) { picked = uid; drawHand(); drawSheet(); }
 function closeSheet() { picked = null; $("sheet").hidden = true; drawHand(); }
 
@@ -441,30 +536,31 @@ function drawStatic() {
   $("myrank").textContent = started ? rankLabel(you.rank) : "—";
   $("ofplayers").textContent = playersLabel(s.players.length);
   $("rankbox").classList.toggle("top", started && you.rank === 1);
-  $("myround").textContent = started ? roundValue(s.round, s.rounds) : "—";
-  $("bar").style.width = started ? `${(s.round / s.rounds) * 100}%` : "0%";
+  $("mystage").textContent = stageLabel(you.layer, s.stages);
+  document.body.dataset.stage = you.layer;   // 背景は自分の階層
 
   const mine = myTurn();
   const playing = s.phase === "playing";
   const cur = s.players.find((p) => p.id === s.turn);
 
+  drawParts();
   drawHand();
   if (picked) drawSheet();
 
   // 開始と終了はPC画面からでもスマホからでもできる
   $("roll").hidden = !playing;
   $("gamestart").hidden = playing;
-  $("roundbox").hidden = playing;
   $("gameend").hidden = !playing;
   $("gamestart").textContent = s.phase === "finished" ? "もう一度あそぶ" : "ゲーム開始";
-  if (document.activeElement !== $("rounds")) $("rounds").value = s.rounds;
 
   if (s.phase === "waiting") {
-    $("msg").innerHTML = "<div>ターン数を決めて<br>「ゲーム開始」を押してください</div>";
+    $("msg").innerHTML = "<div>「ゲーム開始」を<br>押してください</div>";
     $("roll").disabled = true; $("roll").textContent = "かいし待ち";
   } else if (s.phase === "finished") {
     const head = you.rank === 1 ? "あなたの優勝！" : "ゲーム終了";
-    $("msg").innerHTML = `<div><span class="big">${head}</span><br>優勝 ${winnersLabel(s.players) || "—"}<br>` +
+    const clear = s.cleared && s.players.find((p) => p.id === s.cleared);
+    const goal = clear ? `${goalLabel(clear.name)}<br>` : "";
+    $("msg").innerHTML = `<div><span class="big">${head}</span><br>${goal}優勝 ${winnersLabel(s.players) || "—"}<br>` +
       `あなた ${rankLabel(you.rank)}　${moneyLabel(you.money)}</div>`;
     $("roll").disabled = true; $("roll").textContent = "おわり";
   } else if (mine) {
@@ -483,19 +579,31 @@ function drawStatic() {
 }
 
 // 自分のマス目を1つずつ動かす。歩いている間は表示用に仮の値を使う。
-function walkMe(from, steps, onPass, onHalf) {
-  return walk(from, steps, state.size, (pos, dir, i) => {
+function walkMe(info, from, steps, onPass, onHalf) {
+  return walk(from, steps, info.size, (pos, dir, i) => {
     showPos({ pos, resting: false }, true);
     sound.stepTone(dir, i);
     if (dir > 0 && pos === 0) onPass();
-    if (dir > 0 && pos === state.half_pos) onHalf();
+    if (dir > 0 && pos === info.half_pos) onHalf();
   });
+}
+
+// 誰かが階層を登ったら音で知らせる（新しい通し番号のときだけ。途中から開いたときは鳴らさない）
+function announceClimb(s) {
+  const c = s.last_climb;
+  if (!c) { lastClimb = null; return; }
+  if (c.seq === lastClimb) return;
+  const quiet = lastClimb === null && firstState;
+  lastClimb = c.seq;
+  if (!quiet) sound.chime(c.heaven ? GOAL_CHIME : CLIMB_CHIME, 0.13);
 }
 
 async function apply(s) {
   state = s;
+  $("rulesbtn").hidden = false;
   const you = me();
   if (!you) return;
+  announceClimb(s);
 
   const r = s.last_roll;
   // 最初の1回は演出しない（再読み込みや途中参加）。以降は出目が変わるたびに演出する。
@@ -520,25 +628,26 @@ async function apply(s) {
   if (r.id === myId) {
     // 表示用の所持金。増えるたびに足していき、最後にサーバーの値で締める。
     let money = r.before;
+    const info = s.boards[r.layer - 1];   // 振ったときにいた階層の給料と半周ボーナス・盤
     showMoney(money, false);
     const onPass = () => {
-      money += s.salary;
+      money += info.salary;
       showMoney(money, true);
-      $("msg").innerHTML = `<div><span class="big">${salaryLabel(s.salary)}</span></div>`;
+      $("msg").innerHTML = `<div><span class="big">${salaryLabel(info.salary)}</span></div>`;
       sound.chime(SALARY_CHIME);
     };
     // 半分の位置はぴったり止まらなくても通過するだけでもらえる。歩いている途中で判定する。
     const onHalf = () => {
-      money += s.half_bonus;
+      money += info.half_bonus;
       showMoney(money, true);
-      $("msg").innerHTML = `<div><span class="big">${halfwayLabel(s.half_bonus)}</span></div>`;
+      $("msg").innerHTML = `<div><span class="big">${halfwayLabel(info.half_bonus)}</span></div>`;
       sound.chime(HALFWAY_CHIME);
     };
 
-    await walkMe(r.from, r.value, onPass, onHalf);
+    await walkMe(info, r.from, r.value, onPass, onHalf);
     if (r.effect) {
       $("msg").innerHTML = `<div><span class="big">${r.effect}</span></div>`;
-      sound.chime(effectStyle(s.board[r.land].kind).chime);
+      sound.chime(effectStyle(info.squares[r.land].kind).chime);
       if (r.gain) { money += r.gain; showMoney(money, true); }
       await sleep(EFFECT_MS);
 
@@ -554,7 +663,7 @@ async function apply(s) {
         sound.chime(CARD_CHIME);
         await sleep(EFFECT_MS);
       }
-      if (r.shift) await walkMe(r.land, r.shift, onPass, onHalf);
+      if (r.shift) await walkMe(info, r.land, r.shift, onPass, onHalf);
     }
   } else {
     const lines = rollSummary(r);
@@ -625,6 +734,40 @@ $("roll").onclick = () => {
   $("roll").disabled = true;   // 二度押し防止。次のstateで正しい状態に戻る
 };
 
+$("climb").onclick = () => {
+  sound.enable();
+  send({ type: "climb" });
+  $("climb").disabled = true;   // 二度押し防止。次のstateで正しい状態に戻る
+};
+
+/* ---- ルールのポップアップ ----
+ * 文章は shared/rules.js が state から作る。開くたびに作り直すので、いつでも最新の数字が出る。
+ */
+function openRules() {
+  if (!state) return;
+  const body = $("rulesbody");
+  body.innerHTML = "";
+  for (const sec of rulesSections(state)) {
+    const h = document.createElement("h3");
+    h.textContent = sec.title;
+    const ul = document.createElement("ul");
+    for (const item of sec.items) {
+      const li = document.createElement("li");
+      li.textContent = item;
+      ul.append(li);
+    }
+    body.append(h, ul);
+  }
+  body.scrollTop = 0;
+  $("rules").hidden = false;
+}
+function closeRules() { $("rules").hidden = true; }
+
+$("rulesbtn").onclick = openRules;
+$("rulesx").onclick = closeRules;
+$("rulesbg").onclick = closeRules;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRules(); });
+
 $("sheetuse").onclick = () => {
   sound.enable();
   send({ type: "use", uid: picked });
@@ -641,7 +784,7 @@ $("sheetbg").onclick = closeSheet;
 
 $("gamestart").onclick = () => {
   sound.enable();
-  send({ type: "start", rounds: Number($("rounds").value) });
+  send({ type: "start" });
 };
 
 $("gameend").onclick = () => {

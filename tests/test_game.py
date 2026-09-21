@@ -11,7 +11,7 @@ import unittest
 from game import board, cards
 from game.events import HOSTS
 from game.logic import (
-    COLORS, DEFAULT_ROUNDS, FINISHED, MAX_ROUNDS, PLAYING, WAITING, Game, parse_rounds,
+    COLORS, FINISHED, PLAYING, WAITING, Game,
 )
 
 
@@ -35,10 +35,10 @@ class FixedDice:
         return self.cards.pop(0) if len(self.cards) > 1 else self.cards[0]
 
 
-def solo(*rolls: int, rounds: int = 99, cards: list | None = None) -> tuple[Game, object]:
+def solo(*rolls: int, cards: list | None = None) -> tuple[Game, object]:
     game = Game(rng=FixedDice(*rolls, cards=cards))
     player, _ = game.add_player("ひとり")
-    game.handle_host({"type": "start", "rounds": min(rounds, MAX_ROUNDS)})
+    game.handle_host({"type": "start"})
     return game, player
 
 
@@ -127,12 +127,11 @@ class TestTurn(unittest.TestCase):
         self.assertEqual(self.game.handle(self.a.id, {"type": "roll"}), [])
         self.assertEqual(self.a.pos, 0)
 
-    def test_開始すると参加順の先頭が手番になり1ターン目になる(self) -> None:
-        self.game.handle_host({"type": "start", "rounds": 5})
+    def test_開始すると参加順の先頭が手番になる(self) -> None:
+        self.game.handle_host({"type": "start"})
 
         self.assertEqual(self.game.phase, PLAYING)
         self.assertEqual(self.game.current, self.a.id)
-        self.assertEqual((self.game.round, self.game.rounds), (1, 5))
 
     def test_参加者がいなければ開始できない(self) -> None:
         empty = Game()
@@ -163,7 +162,6 @@ class TestTurn(unittest.TestCase):
         self.game.remove_player(self.a.id)
 
         self.assertEqual(self.game.current, self.b.id)
-        self.assertEqual(self.game.round, 1)
 
     def test_全員抜けたら開始前に戻る(self) -> None:
         self.game.handle_host({"type": "start"})
@@ -172,80 +170,64 @@ class TestTurn(unittest.TestCase):
 
         self.assertEqual(self.game.phase, WAITING)
         self.assertIsNone(self.game.current)
-        self.assertEqual(self.game.round, 0)
 
 
-class TestRounds(unittest.TestCase):
-    def test_全員が1回ずつふると次のターンになる(self) -> None:
+class TestNoTurnLimit(unittest.TestCase):
+    def test_何周まわっても自動では終わらない(self) -> None:
         game = Game(rng=FixedDice(2))
         a, _ = game.add_player("A")
         b, _ = game.add_player("B")
-        game.handle_host({"type": "start", "rounds": 3})
+        game.handle_host({"type": "start"})
 
+        for _ in range(200):
+            game.handle(game.current, {"type": "roll"})
+
+        self.assertEqual(game.phase, PLAYING)
+        self.assertIsNotNone(game.current)
+
+    def test_状態にターン数は入らない(self) -> None:
+        game, _ = solo(2)
+
+        state = game.state()
+
+        self.assertNotIn("round", state)
+        self.assertNotIn("rounds", state)
+        self.assertNotIn("round", game.handle(game.current, {"type": "roll"})[0].payload["last_roll"])
+
+    def test_ターン数を送っても無視される(self) -> None:
+        game = Game(rng=FixedDice(2))
+        a, _ = game.add_player("A")
+
+        game.handle_host({"type": "start"})
         game.handle(a.id, {"type": "roll"})
-        self.assertEqual(game.round, 1)
-        game.handle(b.id, {"type": "roll"})
-        self.assertEqual(game.round, 2)
+        game.handle(a.id, {"type": "roll"})
+
+        self.assertEqual(game.phase, PLAYING)
+
+    def test_一回休みの人は飛ばされて次の人がふる(self) -> None:
+        game = Game(rng=FixedDice(9, 2))
+        a, _ = game.add_player("A")
+        b, _ = game.add_player("B")
+        game.handle_host({"type": "start"})
+        game.handle(a.id, {"type": "roll"})     # A は一回休み
+        game.handle(b.id, {"type": "roll"})     # A を飛ばして B
+
+        self.assertEqual(game.current, b.id)
+
+        game.handle(b.id, {"type": "roll"})     # 休みを消化した A に戻る
+
         self.assertEqual(game.current, a.id)
 
-    def test_決めたターン数が終わるとゲーム終了(self) -> None:
-        game = Game(rng=FixedDice(2, 5, 2, 5))
-        a, _ = game.add_player("A")
-        b, _ = game.add_player("B")
-        game.handle_host({"type": "start", "rounds": 2})
-
-        for pid in (a.id, b.id, a.id):
-            game.handle(pid, {"type": "roll"})
-            self.assertEqual(game.phase, PLAYING)
-
-        game.handle(b.id, {"type": "roll"})
-
-        self.assertEqual(game.phase, FINISHED)
-        self.assertIsNone(game.current)
-        self.assertEqual(game.round, 2)                      # 3 にはならない
-        self.assertEqual(game.handle(a.id, {"type": "roll"}), [])   # 終了後はふれない
-
-    def test_最後の番の人が抜けても次のターンに進む(self) -> None:
+    def test_最後の番の人が抜けたら先頭の人に戻る(self) -> None:
         game = Game(rng=FixedDice(2))
         a, _ = game.add_player("A")
         b, _ = game.add_player("B")
-        game.handle_host({"type": "start", "rounds": 3})
+        game.handle_host({"type": "start"})
         game.handle(a.id, {"type": "roll"})     # 次は B（最後の人）
 
         game.remove_player(b.id)
 
         self.assertEqual(game.current, a.id)
-        self.assertEqual(game.round, 2)
-
-    def test_最終ターンの休みの人も飛ばされて終了する(self) -> None:
-        game = Game(rng=FixedDice(9, 2))
-        a, _ = game.add_player("A")
-        b, _ = game.add_player("B")
-        game.handle_host({"type": "start", "rounds": 2})
-        game.handle(a.id, {"type": "roll"})     # A は一回休み
-        game.handle(b.id, {"type": "roll"})     # 2ターン目、A を飛ばして B
-
-        self.assertEqual((game.round, game.current), (2, b.id))
-
-        game.handle(b.id, {"type": "roll"})
-
-        self.assertEqual(game.phase, FINISHED)
-
-    def test_ターン数は範囲に収められる(self) -> None:
-        self.assertEqual(parse_rounds(0), 1)
-        self.assertEqual(parse_rounds(999), MAX_ROUNDS)
-        self.assertEqual(parse_rounds("7"), 7)
-        self.assertEqual(parse_rounds("あ"), DEFAULT_ROUNDS)
-        self.assertEqual(parse_rounds(None), DEFAULT_ROUNDS)
-
-    def test_ターン数を省くと前回と同じ(self) -> None:
-        game = Game()
-        game.add_player("A")
-        game.handle_host({"type": "start", "rounds": 4})
-
-        game.handle_host({"type": "start"})
-
-        self.assertEqual(game.rounds, 4)
 
 
 class TestLoop(unittest.TestCase):
@@ -304,14 +286,14 @@ class TestLoop(unittest.TestCase):
 
     def test_半分の位置にちょうど止まっても大金がもらえる(self) -> None:
         game, p = solo(5)
-        p.pos = 10                              # 15（半分）にちょうど止まる。ここは「もどる-3」でもある
+        p.pos = 10                              # 15（半分）にちょうど止まる
 
         game.handle(p.id, {"type": "roll"})
 
         r = game.last_roll
         self.assertEqual(r["land"], board.HALF)
         self.assertEqual(r["half"], board.HALF_BONUS)
-        self.assertEqual(r["shift"], -3)        # 半分ボーナスとマスの効果は両方乗る
+        self.assertEqual(r["shift"], 0)         # 半周のマス自体には、ほかの効果は無い
 
     def test_半分の位置を通過しなければ大金は出ない(self) -> None:
         game, p = solo(3)
@@ -440,7 +422,6 @@ class TestSquares(unittest.TestCase):
         self.assertEqual(game.current, p.id)  # 他に誰もいないので自分に戻る
         self.assertFalse(p.resting)
         self.assertEqual(game.phase, PLAYING)
-        self.assertEqual(game.round, 3)       # 休んだぶんのターンも進む
 
 
 class TestStartFinishFromPhone(unittest.TestCase):
@@ -452,15 +433,14 @@ class TestStartFinishFromPhone(unittest.TestCase):
         self.b, _ = self.game.add_player("B")
 
     def test_スマホから開始できる(self) -> None:
-        events = self.game.handle(self.b.id, {"type": "start", "rounds": 4})
+        events = self.game.handle(self.b.id, {"type": "start"})
 
         self.assertEqual(self.game.phase, PLAYING)
-        self.assertEqual((self.game.round, self.game.rounds), (1, 4))
         self.assertEqual(self.game.current, self.a.id)      # 手番は参加順の先頭から
         self.assertEqual([e.to for e in events], [HOSTS, self.a.id, self.b.id])
 
     def test_遊んでいる最中の開始は無視される(self) -> None:
-        self.game.handle_host({"type": "start", "rounds": 4})
+        self.game.handle_host({"type": "start"})
         self.game.handle(self.a.id, {"type": "roll"})
 
         self.assertEqual(self.game.handle(self.b.id, {"type": "start"}), [])
@@ -469,7 +449,7 @@ class TestStartFinishFromPhone(unittest.TestCase):
         self.assertEqual(self.game.current, self.b.id)
 
     def test_スマホから終了できその時点の所持金で順位がつく(self) -> None:
-        self.game.handle_host({"type": "start", "rounds": 10})
+        self.game.handle_host({"type": "start"})
         self.a.money = 1500
 
         events = self.game.handle(self.b.id, {"type": "finish"})
@@ -496,16 +476,15 @@ class TestStartFinishFromPhone(unittest.TestCase):
         self.assertEqual(self.game.handle_host({"type": "finish"}), [])
 
     def test_終了後にスマホから再開できる(self) -> None:
-        self.game.handle_host({"type": "start", "rounds": 10})
+        self.game.handle_host({"type": "start"})
         self.game.handle(self.a.id, {"type": "roll"})
         self.game.handle_host({"type": "finish"})
 
-        self.game.handle(self.b.id, {"type": "start", "rounds": 2})
+        self.game.handle(self.b.id, {"type": "start"})
 
         self.assertEqual(self.game.phase, PLAYING)
         self.assertEqual(self.a.pos, 0)
         self.assertEqual(self.a.money, board.START_MONEY)
-        self.assertEqual((self.game.round, self.game.rounds), (1, 2))
 
 
 class TestRanking(unittest.TestCase):
@@ -533,10 +512,11 @@ class TestRanking(unittest.TestCase):
         game = Game(rng=FixedDice(4, 5))       # A は +200円、B は -100円
         a, _ = game.add_player("A")
         b, _ = game.add_player("B")
-        game.handle_host({"type": "start", "rounds": 1})
+        game.handle_host({"type": "start"})
 
         game.handle(a.id, {"type": "roll"})
         game.handle(b.id, {"type": "roll"})
+        game.handle_host({"type": "finish"})
 
         self.assertEqual(game.phase, FINISHED)
         self.assertEqual(game.ranks(), {a.id: 1, b.id: 2})
@@ -552,20 +532,19 @@ class TestRestart(unittest.TestCase):
         self.assertEqual(p.pos, 0)
         self.assertEqual(p.money, board.START_MONEY)
         self.assertEqual(game.phase, WAITING)
-        self.assertEqual(game.round, 0)
         self.assertIsNone(game.last_roll)
 
     def test_もう一度開始すると位置も所持金もターンも初期化される(self) -> None:
-        game, p = solo(4, rounds=1)
+        game, p = solo(4)
         game.handle(p.id, {"type": "roll"})
+        game.handle_host({"type": "finish"})
         self.assertEqual(game.phase, FINISHED)
 
-        game.handle_host({"type": "start", "rounds": 3})
+        game.handle_host({"type": "start"})
 
         self.assertEqual(p.pos, 0)
         self.assertEqual(p.money, board.START_MONEY)
         self.assertEqual(game.phase, PLAYING)
-        self.assertEqual((game.round, game.rounds), (1, 3))
         self.assertEqual(game.current, p.id)
 
 
@@ -577,13 +556,14 @@ class TestState(unittest.TestCase):
         state = game.state()
 
         self.assertEqual(state["type"], "state")
-        self.assertEqual(state["size"], board.SIZE)
-        self.assertEqual(state["salary"], board.SALARY)
-        self.assertEqual(state["half_pos"], board.HALF)
-        self.assertEqual(state["half_bonus"], board.HALF_BONUS)
+        self.assertEqual(state["start_money"], board.START_MONEY)
         self.assertEqual(state["card_limit"], cards.LIMIT)
-        self.assertEqual(len(state["board"]), board.SIZE)
-        self.assertEqual((state["round"], state["rounds"]), (0, DEFAULT_ROUNDS))
+        self.assertEqual(len(state["boards"]), board.TOP_LAYER)
+        self.assertEqual(len(state["boards"][0]["squares"]), board.SIZE)
+        self.assertEqual((state["boards"][0]["size"], state["boards"][0]["half_pos"]), (board.SIZE, board.HALF))
+        self.assertEqual(state["boards"][0]["salary"], board.SALARY)
+        self.assertEqual(state["boards"][0]["half_bonus"], board.HALF_BONUS)
+        self.assertIsNone(state["cleared"])
         player = state["players"][0]
         self.assertEqual(player["id"], a.id)
         self.assertEqual(player["money"], board.START_MONEY)
@@ -830,22 +810,345 @@ class TestCards(unittest.TestCase):
         self.assertIsNone(mine["you"]["drew"])          # ひいた記録も消える
 
     def test_もう一度あそぶと手札も消える(self) -> None:
-        game, p = solo(1, rounds=1, cards=[cards.ADVANCE_2])
-        game.handle(p.id, {"type": "roll"})      # 1ターンだけなのでここで終了する
+        game, p = solo(1, cards=[cards.ADVANCE_2])
+        game.handle(p.id, {"type": "roll"})
+        game.handle_host({"type": "finish"})
         self.assertEqual((game.phase, len(p.hand)), (FINISHED, 1))
 
-        game.handle_host({"type": "start", "rounds": 3})
+        game.handle_host({"type": "start"})
 
         self.assertEqual(p.hand, [])
 
     def test_山札のカードは使い道が揃っている(self) -> None:
         kinds = {c.kind for c in cards.DECK}
-        self.assertEqual(kinds, {"advance", "double", "guard"})
+        self.assertEqual(kinds, {"advance", "double", "guard", "part"})
         # 自動で発動するのはおまもりだけ
         self.assertEqual({c.label for c in cards.DECK if c.passive}, {cards.GUARD.label})
         for card in cards.DECK:
             # 画面に出す文字が欠けていない（label と short は札の表、desc は押したとき）
             self.assertTrue(card.label and card.short and card.desc)
+
+
+CARD_POS = next(i for i, s in enumerate(board.BOARD) if s.kind == "card")   # 最初のカードマス
+PLAIN_POS = next(i for i, s in enumerate(board.BOARD) if s.kind == "normal")  # 最初の何も起きないマス
+
+
+def with_parts(player, right: int = 0, left: int = 0, engine: int = 0) -> None:
+    player.parts = {"right": right, "left": left, "engine": engine}
+
+
+class TestLayerBoards(unittest.TestCase):
+    def test_半周のマスは専用マスで各階層の真ん中にある(self) -> None:
+        for layer in range(1, board.TOP_LAYER + 1):
+            self.assertEqual(board.half(layer), board.size(layer) // 2)
+            self.assertEqual(board.square(layer, board.half(layer)).kind, "half", f"{layer}階")
+            self.assertEqual(board.square(layer, 0).kind, "start", f"{layer}階")
+            self.assertEqual(sum(s.kind == "half" for s in board.BOARDS[layer - 1]), 1, f"{layer}階")
+
+    def test_上の階層ほどマス数が多く1階は今のまま(self) -> None:
+        sizes = [board.size(layer) for layer in range(1, board.TOP_LAYER + 1)]
+
+        self.assertEqual(sizes[0], 30)
+        self.assertEqual(sizes, sorted(set(sizes)))              # 増えていく
+        self.assertEqual([len(b) for b in board.BOARDS], sizes)  # 盤の長さと一致
+        self.assertTrue(all(n % 2 == 0 for n in sizes))          # 盤を輪に並べるため偶数
+
+    def test_登ってもマスの位置は新しい盤の中に収まる(self) -> None:
+        game, p = solo(1)
+        p.pos = board.size(1) - 1
+        with_parts(p, 1, 1, 1)
+
+        game.handle(p.id, {"type": "climb"})
+
+        self.assertEqual((p.layer, p.pos), (2, board.size(1) - 1))
+        self.assertLess(p.pos, board.size(p.layer))
+
+    def test_盤の端で一周するのは階層のマス数(self) -> None:
+        for layer in range(1, board.TOP_LAYER + 1):
+            n = board.size(layer)
+            game, p = solo(4)
+            p.layer, p.pos = layer, n - 3
+
+            game.handle(p.id, {"type": "roll"})
+
+            self.assertEqual(game.last_roll["from"], n - 3, f"{layer}階")
+            self.assertEqual(game.last_roll["land"], 1, f"{layer}階")   # (n-3)+4 が n を越えて 1 へ
+            self.assertEqual(game.last_roll["salary"], board.salary(layer), f"{layer}階")
+
+    def test_途中の位置では一周しない(self) -> None:
+        # 2階の盤は40マス。地上の一周（30）を越えても、まだスタートは通らない
+        game, p = solo(4)
+        p.layer, p.pos = 2, board.size(1) - 1     # 29 + 4 = 33 < 40
+
+        game.handle(p.id, {"type": "roll"})
+
+        self.assertEqual(game.last_roll["salary"], 0)
+        self.assertEqual(game.last_roll["land"], board.size(1) - 1 + 4)
+
+    def test_半周するごとにもらえるのは1000円(self) -> None:
+        self.assertEqual(board.HALF_BONUS, 1000)
+        self.assertEqual(board.half_bonus(1), 1000)
+
+    def test_階層ごとにマスの内容が違う(self) -> None:
+        layouts = [[(s.kind, s.value) for s in b] for b in board.BOARDS]
+
+        self.assertEqual(len(board.BOARDS), board.TOP_LAYER)
+        self.assertEqual(len({tuple(x) for x in layouts}), board.TOP_LAYER)
+
+    def test_上の階層ほどお金の桁が1つずつ増える(self) -> None:
+        self.assertEqual(board.SCALES, [1, 10, 100])
+        for layer in (2, 3):
+            self.assertEqual(board.salary(layer), board.salary(layer - 1) * 10)
+            self.assertEqual(board.half_bonus(layer), board.half_bonus(layer - 1) * 10)
+
+    def test_マスの金額にも倍率がかかりラベルにも出る(self) -> None:
+        sq1 = next(s for s in board.BOARDS[0] if s.kind == "gain")
+        big = max((s for s in board.BOARDS[2] if s.kind == "gain"), key=lambda s: s.value)
+
+        self.assertEqual(sq1.value % 100, 0)
+        self.assertGreaterEqual(big.value, 10 * 100 * 5)
+        self.assertIn(f"{big.value:,}", big.label)
+
+    def test_どの階層にもカードマスがありパーツを拾える(self) -> None:
+        for layer in range(1, board.TOP_LAYER + 1):
+            self.assertGreaterEqual(sum(s.kind == "card" for s in board.BOARDS[layer - 1]), 5, f"{layer}階")
+
+    def test_人は自分がいる階層の盤のマスの効果を受ける(self) -> None:
+        for layer in range(1, board.TOP_LAYER + 1):
+            idx = next(i for i, s in enumerate(board.BOARDS[layer - 1]) if s.kind == "gain")
+            game, p = solo(idx)
+            p.layer = layer
+
+            game.handle(p.id, {"type": "roll"})
+
+            self.assertEqual(game.last_roll["layer"], layer)
+            self.assertEqual(game.last_roll["gain"], board.square(layer, idx).value, f"{layer}階")
+
+    def test_スタート通過の給料は階層の額(self) -> None:
+        for layer in range(1, board.TOP_LAYER + 1):
+            game, p = solo(4)
+            p.layer, p.pos = layer, board.size(layer) - 3
+
+            game.handle(p.id, {"type": "roll"})
+
+            self.assertEqual(game.last_roll["salary"], board.salary(layer), f"{layer}階")
+
+    def test_半周の大金は階層の額(self) -> None:
+        for layer in range(1, board.TOP_LAYER + 1):
+            game, p = solo(4)
+            p.layer, p.pos = layer, board.half(layer) - 2
+
+            game.handle(p.id, {"type": "roll"})
+
+            self.assertEqual(game.last_roll["half"], board.half_bonus(layer), f"{layer}階")
+
+    def test_ワープの半周ボーナスも階層の額(self) -> None:
+        # 3階の 23 は ワープ+4。21 + 2 = 23 に止まり、半周(25)を越える
+        game, p = solo(2)
+        p.layer, p.pos = 3, 21
+        self.assertEqual((board.square(3, 23).kind, board.square(3, 23).value), ("forward", 4))
+
+        game.handle(p.id, {"type": "roll"})
+
+        self.assertEqual(game.last_roll["half"], board.half_bonus(3))
+
+
+class TestStages(unittest.TestCase):
+    def test_パーツはカードマスでもらえて手札には入らない(self) -> None:
+        game, p = solo(CARD_POS, cards=[cards.PART_RIGHT])
+
+        game.handle(p.id, {"type": "roll"})
+
+        self.assertEqual(p.parts, {"right": 1, "left": 0, "engine": 0})
+        self.assertEqual(p.hand, [])
+        self.assertTrue(game.last_roll["drew"])
+
+    def test_パーツは手札の上限に数えない(self) -> None:
+        game, p = solo(CARD_POS, cards=[cards.PART_LEFT])
+        with_parts(p, right=1, left=5, engine=1)
+        p.hand.extend(cards.Held(f"x{i}", cards.GUARD) for i in range(cards.LIMIT))
+
+        game.handle(p.id, {"type": "roll"})
+
+        self.assertEqual(p.over, 0)
+        self.assertEqual(len(p.hand), cards.LIMIT)
+
+    def test_パーツの中身は本人にだけ届く(self) -> None:
+        game = Game(rng=FixedDice(CARD_POS, cards=[cards.PART_ENGINE]))
+        a, _ = game.add_player("A")
+        b, _ = game.add_player("B")
+        game.handle_host({"type": "start"})
+
+        events = {e.to: e.payload for e in game.handle(a.id, {"type": "roll"})}
+
+        self.assertEqual(events[a.id]["you"]["parts"], {"right": 0, "left": 0, "engine": 1})
+        self.assertNotIn("you", events[HOSTS])
+        self.assertEqual(events[b.id]["you"]["parts"], {"right": 0, "left": 0, "engine": 0})
+        # 全員に見えるのは階層と、パーツの個数だけ
+        public = next(p for p in events[HOSTS]["players"] if p["id"] == a.id)
+        self.assertEqual((public["layer"], public["parts"]), (1, 1))
+
+    def test_3種類そろうと1階層上に登れてパーツが消える(self) -> None:
+        game, p = solo(1)
+        with_parts(p, right=1, left=1, engine=1)
+
+        self.assertTrue(game.handle(p.id, {"type": "climb"}))
+
+        self.assertEqual(p.layer, 2)
+        self.assertEqual(p.parts, {"right": 0, "left": 0, "engine": 0})
+        self.assertEqual(game.last_climb["layer"], 2)
+        self.assertEqual(p.pos, 0)   # 位置はそのまま
+
+    def test_1種類でも欠けていると登れない(self) -> None:
+        game, p = solo(1)
+        with_parts(p, right=3, left=2, engine=0)
+
+        self.assertEqual(game.handle(p.id, {"type": "climb"}), [])
+
+        self.assertEqual(p.layer, 1)
+        self.assertEqual(p.parts["right"], 3)
+
+    def test_余ったパーツは残る(self) -> None:
+        game, p = solo(1)
+        with_parts(p, right=2, left=1, engine=3)
+
+        game.handle(p.id, {"type": "climb"})
+
+        self.assertEqual(p.parts, {"right": 1, "left": 0, "engine": 2})
+
+    def test_自分の番でなければ登れない(self) -> None:
+        game = Game(rng=FixedDice(1))
+        a, _ = game.add_player("A")
+        b, _ = game.add_player("B")
+        game.handle_host({"type": "start"})
+        with_parts(b, 1, 1, 1)
+
+        self.assertEqual(game.handle(b.id, {"type": "climb"}), [])
+
+        self.assertEqual(b.layer, 1)
+
+    def test_開始前や終了後は登れない(self) -> None:
+        game, p = solo(1)
+        with_parts(p, 1, 1, 1)
+        game.handle_host({"type": "finish"})
+
+        self.assertEqual(game.handle(p.id, {"type": "climb"}), [])
+
+        self.assertEqual(p.layer, 1)
+
+    def test_登れるのは自分だけで他の人の階層は変わらない(self) -> None:
+        game = Game(rng=FixedDice(1))
+        a, _ = game.add_player("A")
+        b, _ = game.add_player("B")
+        game.handle_host({"type": "start"})
+        with_parts(a, 1, 1, 1)
+
+        game.handle(a.id, {"type": "climb"})
+
+        self.assertEqual((a.layer, b.layer), (2, 1))
+
+    def test_登っても手番は終わらずそのままふれる(self) -> None:
+        game, p = solo(PLAIN_POS)
+        with_parts(p, 1, 1, 1)
+
+        game.handle(p.id, {"type": "climb"})
+        game.handle(p.id, {"type": "roll"})
+
+        self.assertEqual((p.layer, p.pos), (2, PLAIN_POS))
+
+    def test_最上階でパーツがそろうと天国へ旅立ってゲームが終わる(self) -> None:
+        game = Game(rng=FixedDice(1))
+        a, _ = game.add_player("A")
+        b, _ = game.add_player("B")
+        game.handle_host({"type": "start"})
+        a.layer = board.TOP_LAYER
+        with_parts(a, 1, 1, 1)
+
+        self.assertTrue(game.handle(a.id, {"type": "climb"}))
+
+        self.assertEqual(game.phase, FINISHED)
+        self.assertIsNone(game.current)
+        self.assertEqual(game.cleared, a.id)
+        self.assertEqual(game.state()["cleared"], a.id)
+        self.assertTrue(game.last_climb["heaven"])
+        self.assertEqual(a.layer, board.TOP_LAYER)     # 階層は最上階のまま
+        self.assertEqual(a.parts, {"right": 0, "left": 0, "engine": 0})
+
+    def test_最上階でもパーツがそろっていなければ旅立てない(self) -> None:
+        game, p = solo(1)
+        p.layer = board.TOP_LAYER
+        with_parts(p, 1, 1, 0)
+
+        self.assertEqual(game.handle(p.id, {"type": "climb"}), [])
+
+        self.assertEqual(game.phase, PLAYING)
+        self.assertIsNone(game.cleared)
+
+    def test_最上階でスタートを越えてもゴールにならない(self) -> None:
+        game, p = solo(4)
+        p.layer, p.pos = board.TOP_LAYER, board.SIZE - 3
+
+        game.handle(p.id, {"type": "roll"})
+
+        self.assertEqual(game.phase, PLAYING)
+        self.assertIsNone(game.cleared)
+
+    def test_下の階層では天国へは旅立てず1階層登るだけ(self) -> None:
+        for layer in range(1, board.TOP_LAYER):
+            game, p = solo(1)
+            p.layer = layer
+            with_parts(p, 1, 1, 1)
+
+            game.handle(p.id, {"type": "climb"})
+
+            self.assertEqual(p.layer, layer + 1)
+            self.assertEqual(game.phase, PLAYING)
+            self.assertFalse(game.last_climb["heaven"])
+
+    def test_旅立っても勝つのは所持金が一番多い人(self) -> None:
+        game = Game(rng=FixedDice(1))
+        a, _ = game.add_player("A")
+        b, _ = game.add_player("B")
+        game.handle_host({"type": "start"})
+        a.layer = board.TOP_LAYER
+        with_parts(a, 1, 1, 1)
+        b.money = 5000
+
+        game.handle(a.id, {"type": "climb"})
+
+        self.assertEqual(game.ranks(), {b.id: 1, a.id: 2})
+        self.assertEqual(game.cleared, a.id)
+
+    def test_旅立ったあとはふれない(self) -> None:
+        game, p = solo(1)
+        p.layer = board.TOP_LAYER
+        with_parts(p, 1, 1, 1)
+        game.handle(p.id, {"type": "climb"})
+
+        self.assertEqual(game.handle(p.id, {"type": "roll"}), [])
+
+    def test_開始し直すと階層とパーツが最初に戻る(self) -> None:
+        game, p = solo(1)
+        p.layer = 2
+        with_parts(p, 2, 1, 1)
+        game.handle_host({"type": "finish"})
+
+        game.handle_host({"type": "start"})
+
+        self.assertEqual((p.layer, p.parts), (1, {"right": 0, "left": 0, "engine": 0}))
+        self.assertIsNone(game.last_climb)
+        self.assertIsNone(game.cleared)
+
+    def test_階層の名前は状態で配る(self) -> None:
+        state = Game().state()
+
+        self.assertEqual([s["name"] for s in state["stages"]], ["地上", "天空", "宇宙"])
+        self.assertEqual([k["label"] for k in state["part_kinds"]], ["右翼", "左翼", "エンジン"])
+
+    def test_山札にパーツが3種類とも入っている(self) -> None:
+        deck_parts = {c.part for c in cards.DECK if c.kind == "part"}
+
+        self.assertEqual(deck_parts, {"right", "left", "engine"})
 
 
 if __name__ == "__main__":

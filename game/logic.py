@@ -5,11 +5,16 @@
 
     game = Game(rng=random.Random(0))
     player, _ = game.add_player("タロウ")
-    game.handle_host({"type": "start", "rounds": 10})
+    game.handle_host({"type": "start"})
     game.handle(player.id, {"type": "roll"})
 
-ゴールは無い。盤をぐるぐる回ってお金を集め、
-決めたターン数が終わった時点で所持金の多い人が勝つ。
+盤をぐるぐる回ってお金を集める。階層は地上・天空・宇宙の3つあり、
+上の階層へはパーツ（右翼・左翼・エンジン）を3種類そろえて登る。
+最上階でもパーツを3種類そろえると天国へ旅立ってクリアで、その時点でゲームが終わる。
+ターン数の決まりは無い。誰かが旅立つまで、または「ここで終了」を押すまで続く。
+勝つのは、終わった時点で所持金の多い人。
+
+盤・給料・半周ボーナスは階層ごとに違う（game/board.py）。人は自分がいる階層の盤を歩く。
 
 カードマスに止まるとカードを1枚もらえる。誰が何を持っているかは持ち主にしか
 見せないので、状態の配り方だけが他と違う（_broadcast と _private を見ること）。
@@ -30,30 +35,18 @@ WAITING = "waiting"    # 開始待ち
 PLAYING = "playing"
 FINISHED = "finished"
 
-DEFAULT_ROUNDS = 10    # ターン数の指定が無いとき
-MAX_ROUNDS = 50
 
-
-def parse_rounds(value: object, default: int = DEFAULT_ROUNDS) -> int:
-    """PC画面から来たターン数を 1〜MAX_ROUNDS に収める。読めなければ default。"""
-    try:
-        rounds = int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return default
-    return max(1, min(rounds, MAX_ROUNDS))
-
-
-def _crossings(start: int, steps: int, point: int) -> int:
+def _crossings(start: int, steps: int, point: int, size: int) -> int:
     """start から steps だけ前に進む間に、盤の point マスを何回通過したか。
 
     ちょうど point に止まった場合も1回に数える。盤は一周つながっているので、
     大きく進めば複数回通過することもある。戻るとき（steps <= 0）は 0。
-    スタート地点（point=0）を通過するたびに給料が出るのと同じ考え方で、
-    半分の位置（board.HALF）を通過するたびに大金がもらえる判定にも使う。
+    size は盤のマス数（階層で違う）。スタート地点（point=0）を通過するたびに給料が出るのと
+    同じ考え方で、半周の位置（board.half）を通過するたびに大金がもらえる判定にも使う。
     """
     if steps <= 0:
         return 0
-    return ((start - point) % board.SIZE + steps) // board.SIZE
+    return ((start - point) % size + steps) // size
 
 
 @dataclass
@@ -67,6 +60,9 @@ class Player:
     hand: list[cards.Held] = field(default_factory=list)
     bonus: int = 0             # カードで足す歩数。次にふるときに使われる
     dice: int = 1              # 次にふるサイコロの数
+    layer: int = 1             # いまいる階層（1 = 地上）。登ると1つ増える
+    parts: dict[str, int] = field(default_factory=lambda: dict.fromkeys(cards.PART_IDS, 0))
+    """持っているパーツの数。手札とは別に持つ（上限なし・捨てられない）。"""
 
     def to_dict(self) -> dict:
         """全員に見せる情報。
@@ -84,7 +80,14 @@ class Player:
             "cards": len(self.hand),
             "bonus": self.bonus,
             "dice": self.dice,
+            "layer": self.layer,
+            "parts": sum(self.parts.values()),   # 個数だけ。何を持っているかは本人だけ
         }
+
+    @property
+    def can_climb(self) -> bool:
+        """3種類がそろっていれば登れる。最上階では、登る代わりに天国へ旅立つ。"""
+        return all(n > 0 for n in self.parts.values())
 
     @property
     def over(self) -> int:
@@ -99,13 +102,14 @@ class Game:
     order: list[str] = field(default_factory=list)   # 手番の順（参加順）
     phase: str = WAITING
     current: str | None = None                       # 今の手番のプレイヤーID
-    round: int = 0                                   # 今が何ターン目か（1始まり。開始前は0）
-    rounds: int = DEFAULT_ROUNDS                     # 全部で何ターン遊ぶか
     last_roll: dict | None = None                    # 直前の出目と移動の記録
     _seq: int = 0
     _rolls: int = 0                                  # サイコロを振った通し番号
     _cards: int = 0                                  # カードを配った通し番号（uid用）
     _drew: tuple[str, dict] | None = None            # 直前にカードをひいた人と、その中身
+    last_climb: dict | None = None                   # 直前に階層を登った記録
+    cleared: str | None = None                       # 天国へ旅立った（クリアした）人のID
+    _climbs: int = 0                                 # 登った通し番号
 
     # ---- 状態の受け渡し ------------------------------------------------
 
@@ -122,16 +126,15 @@ class Game:
         return {
             "type": "state",
             "phase": self.phase,
-            "size": board.SIZE,
-            "salary": board.SALARY,
-            "half_pos": board.HALF,
-            "half_bonus": board.HALF_BONUS,
+            "start_money": board.START_MONEY,
             "card_limit": cards.LIMIT,
-            "board": board.to_dict(),
+            "stages": board.stages_to_dict(),
+            "part_kinds": [{"id": c.part, "label": c.label} for c in cards.PARTS],
+            "boards": board.to_dict(),   # 階層ごとの盤・給料・半周ボーナス
             "turn": self.current,
-            "round": self.round,
-            "rounds": self.rounds,
             "last_roll": self.last_roll,
+            "last_climb": self.last_climb,
+            "cleared": self.cleared,
             "players": [
                 {**self.players[pid].to_dict(), "rank": ranks[pid]} for pid in self.order
             ],
@@ -165,6 +168,8 @@ class Game:
             "you": {
                 "id": player_id,
                 "hand": [held.to_dict() for held in player.hand],
+                "parts": dict(player.parts),   # パーツごとの数
+                "can_climb": player.can_climb,
                 "over": player.over,     # 捨てないと次にふれない枚数
                 "drew": drew,            # 直前に自分がひいたカード（演出用）
             },
@@ -198,7 +203,6 @@ class Game:
         if not self.order:
             self.phase = WAITING
             self.current = None
-            self.round = 0
             self._clear_roll()
         elif was_current:
             # 手番の人が抜けた。抜けた位置の「ひとつ前」から次を探す。
@@ -225,9 +229,12 @@ class Game:
         if kind == "discard":
             return self._discard(player, message.get("uid", ""))
 
+        if kind == "climb":
+            return self._climb(player)
+
         # 開始と終了はスマホからもできる。PC画面の前に人がいなくても遊べるように。
         if kind == "start":
-            return self.start(message.get("rounds"))
+            return self.start()
 
         if kind == "finish":
             return self.finish()
@@ -247,7 +254,7 @@ class Game:
         kind = message.get("type")
 
         if kind == "start":
-            return self.start(message.get("rounds"))
+            return self.start()
         if kind == "finish":
             return self.finish()
         if kind == "reset":
@@ -267,18 +274,16 @@ class Game:
 
     # ---- 進行 ----------------------------------------------------------
 
-    def start(self, rounds: object = None) -> list[Event]:
-        """ゲーム開始。rounds を省くと前回と同じターン数で遊ぶ。
+    def start(self) -> list[Event]:
+        """ゲーム開始。
 
         遊んでいる最中は受け付けない（スマホの誤操作で進行が消えないように）。
         """
         if not self.order or self.phase == PLAYING:
             return []
-        self.rounds = parse_rounds(rounds, default=self.rounds)
         self._reset_players()
         self.phase = PLAYING
         self.current = self.order[0]
-        self.round = 1
         self._clear_roll()
         return self._broadcast()
 
@@ -294,13 +299,14 @@ class Game:
         self._reset_players()
         self.phase = WAITING
         self.current = None
-        self.round = 0
         self._clear_roll()
         return self._broadcast()
 
     def _clear_roll(self) -> None:
         """直前の出目の記録を消す。本人にだけ送っていたカードの記録も一緒に消す。"""
         self.last_roll = None
+        self.last_climb = None
+        self.cleared = None
         self._drew = None
 
     def _reset_players(self) -> None:
@@ -311,6 +317,8 @@ class Game:
             player.hand.clear()
             player.bonus = 0
             player.dice = 1
+            player.layer = 1
+            player.parts = dict.fromkeys(cards.PART_IDS, 0)
 
     def _roll(self, player: Player) -> list[Event]:
         if self.phase != PLAYING or self.current != player.id:
@@ -328,12 +336,16 @@ class Game:
         start = player.pos
         before = player.money
 
+        layer = player.layer       # 振っている間に階層は変わらない
+        bonus_half = board.half_bonus(layer)
+        size, half_pos = board.size(layer), board.half(layer)
+
         salary = self._move(player, value)
-        half = self._earn(player, _crossings(start, value, board.HALF) * board.HALF_BONUS)
+        half = self._earn(player, _crossings(start, value, half_pos, size) * bonus_half)
         land = player.pos          # マスの効果を受ける前。ここまでを1マスずつ進む。
 
-        square = board.BOARD[land]
-        effect = square.label if square.kind not in ("start", "normal") else None
+        square = board.square(layer, land)
+        effect = square.label if square.kind not in ("start", "half", "normal") else None
         shift = 0                  # マスの効果で動いた歩数（戻るときは負）
         gain = 0                   # マスの効果で増減した金額
         blocked = 0                # おまもりで払わずにすんだ金額
@@ -342,7 +354,7 @@ class Game:
         if square.kind == "forward":
             shift = square.value
             salary += self._move(player, shift)
-            half += self._earn(player, _crossings(land, shift, board.HALF) * board.HALF_BONUS)
+            half += self._earn(player, _crossings(land, shift, half_pos, size) * bonus_half)
         elif square.kind == "back":
             shift = -square.value
             self._move(player, shift)
@@ -379,7 +391,7 @@ class Game:
             "blocked": blocked,    # おまもりで無効にした支払い。使ったことは全員に見せる
             "drew": drew is not None,   # ひいたか。何をひいたかは本人だけ
             "money": player.money,
-            "round": self.round,
+            "layer": layer,        # 振ったときの階層（盤・給料が階層ごとに違うため）
         }
 
         self._advance(self.order.index(player.id))
@@ -391,11 +403,42 @@ class Game:
         """カードを1枚配る。上限を超えてもここでは捨てさせない。
 
         溢れたぶんは本人が選んで捨てる。それまでその人はふれない。
+        パーツだったときは手札に入れず、パーツの数を1つ増やす。
         """
         self._cards += 1
         held = cards.Held(uid=f"c{self._cards}", card=cards.draw(self.rng))
-        player.hand.append(held)
+        if held.card.kind == "part":
+            player.parts[held.card.part] += 1
+        else:
+            player.hand.append(held)
         return held
+
+    def _climb(self, player: Player) -> list[Event]:
+        """パーツを1種類ずつ使って、自分だけ1階層上に登る。自分の番の間だけ。
+
+        マスの位置はそのまま。パーツはこのとき消える（余ったぶんは残る）。
+        最上階では登る先が無いので、代わりに天国へ旅立つ。クリアで、ゲームが終わる。
+        """
+        if self.phase != PLAYING or self.current != player.id or not player.can_climb:
+            return []
+        for part in player.parts:
+            player.parts[part] -= 1
+        heaven = player.layer >= board.TOP_LAYER
+        if not heaven:
+            player.layer += 1
+        self._climbs += 1
+        self.last_climb = {
+            "seq": self._climbs,   # 画面側が「新しく登ったか」を判定するための通し番号
+            "id": player.id,
+            "name": player.name,
+            "layer": player.layer,
+            "heaven": heaven,      # 天国へ旅立った（layer は最上階のまま）
+        }
+        if heaven:
+            self.cleared = player.id
+            self.phase = FINISHED
+            self.current = None
+        return self._broadcast()
 
     def _take_guard(self, player: Player) -> bool:
         """おまもりを1枚使う。持っていれば True（支払いは起きない）。
@@ -449,10 +492,11 @@ class Game:
         その額を返す。戻ってスタートを越えても給料は出ない。
         """
         total = player.pos + steps
-        player.pos = total % board.SIZE
+        size = board.size(player.layer)
+        player.pos = total % size
         if steps <= 0:
             return 0
-        return self._earn(player, (total // board.SIZE) * board.SALARY)
+        return self._earn(player, (total // size) * board.salary(player.layer))
 
     def _earn(self, player: Player, amount: int) -> int:
         """所持金を増減する。0円より下にはならない。実際に動いた額を返す。"""
@@ -464,8 +508,7 @@ class Game:
     def _advance(self, from_index: int) -> None:
         """from_index の次から、番が回せる人を探す。
 
-        参加順の最後から先頭に戻ったら1ターン終わり。決めたターン数を
-        越えたらゲーム終了。一回休みの人は、休みを消化して飛ばす。
+        一回休みの人は、休みを消化して飛ばす。
         """
         count = len(self.order)
         if count == 0:
@@ -476,16 +519,7 @@ class Game:
         # 2周ぶん見る。1周目で休みを消化した人を2周目で拾えるようにするため
         # （残り1人が休みのときに手番が消えるのを防ぐ）。
         for step in range(1, count * 2 + 1):
-            index = from_index + step
-            if index > 0 and index % count == 0:
-                # 全員の番が一巡した
-                if self.round >= self.rounds:
-                    self.phase = FINISHED
-                    self.current = None
-                    return
-                self.round += 1
-
-            candidate = self.players[self.order[index % count]]
+            candidate = self.players[self.order[(from_index + step) % count]]
             if candidate.resting:
                 candidate.resting = False
                 continue

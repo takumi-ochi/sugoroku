@@ -1,0 +1,135 @@
+/* 階層ごとの背景。画像ファイルは使わず、CSSだけで描く。
+ *
+ *   s1 地上（夕暮れの丘）  s2 天空（雲の流れる青空）  s3 宇宙（星・星雲・惑星）
+ *
+ * ページは <body data-stage="1"> と、次の1つの入れ物を持つ。
+ *   <div id="stagebg" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
+ * body の data-stage を書き換えると、背景が1.4秒かけて入れ替わる。
+ * 盤面や一覧はその上に半透明で重なるので、文字の読みやすさは変わらない。
+ *
+ * 注意: body に background を指定しないこと。指定すると背景が body の前に出て隠れる。
+ * 色は html に付ける。
+ */
+
+html { background: #04050d; }
+
+#stagebg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+#stagebg i {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+
+body[data-stage="1"] #stagebg .s1,
+body[data-stage="2"] #stagebg .s2,
+body[data-stage="3"] #stagebg .s3 { opacity: 1; }
+
+/* 明るい背景（地上・天空）では、背景に直接乗る文字に薄い影を付けて読みやすくする */
+body[data-stage="1"],
+body[data-stage="2"] { text-shadow: 0 1px 4px rgba(0, 0, 0, .55); }
+
+/* ---- 1 地上: 夕暮れの空と、重なる丘 ---- */
+.s1 {
+  background:
+    /* 手前の丘（暗い緑） */
+    radial-gradient(ellipse 75% 20% at 18% 104%, #0b2317 0 62%, transparent 63%),
+    radial-gradient(ellipse 85% 24% at 82% 106%, #10301f 0 62%, transparent 63%),
+    /* 奥の丘 */
+    radial-gradient(ellipse 60% 15% at 50% 101%, #1b4a34 0 62%, transparent 63%),
+    radial-gradient(ellipse 55% 13% at 8% 99%, #235a3f 0 62%, transparent 63%),
+    /* 太陽と、その光 */
+    radial-gradient(circle 46px at 72% 79%, #fff4d6 0 55%, rgba(255, 226, 160, .8) 85%, transparent 100%),
+    radial-gradient(ellipse 45% 40% at 72% 82%, rgba(255, 176, 96, .6), transparent 72%),
+    /* 空 */
+    linear-gradient(180deg, #14284f 0%, #2a5a99 42%, #d98c5c 80%, #f0c188 100%);
+}
+
+/* ---- 2 天空: 青空と、ゆっくり流れる雲 ---- */
+.s2 {
+  background:
+    radial-gradient(ellipse 40% 30% at 85% 8%, rgba(255, 255, 255, .55), transparent 70%),
+    linear-gradient(180deg, #0d4796 0%, #2b82d4 40%, #78bdef 76%, #c4e3f8 100%);
+}
+
+/* 雲。同じ絵を横に2枚並べて、半分だけ動かして繰り返す */
+.s2::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  background:
+    radial-gradient(ellipse 9% 5% at 14% 22%, rgba(255, 255, 255, .8), transparent 72%),
+    radial-gradient(ellipse 7% 4% at 19% 25%, rgba(255, 255, 255, .7), transparent 72%),
+    radial-gradient(ellipse 8% 4% at 10% 26%, rgba(255, 255, 255, .7), transparent 72%),
+    radial-gradient(ellipse 10% 5% at 55% 48%, rgba(255, 255, 255, .75), transparent 72%),
+    radial-gradient(ellipse 7% 4% at 61% 51%, rgba(255, 255, 255, .65), transparent 72%),
+    radial-gradient(ellipse 9% 4% at 50% 52%, rgba(255, 255, 255, .65), transparent 72%),
+    radial-gradient(ellipse 12% 6% at 84% 74%, rgba(255, 255, 255, .8), transparent 72%),
+    radial-gradient(ellipse 8% 4% at 90% 77%, rgba(255, 255, 255, .7), transparent 72%),
+    radial-gradient(ellipse 8% 4% at 33% 84%, rgba(255, 255, 255, .6), transparent 72%);
+  background-size: 50% 100%;
+  background-repeat: repeat-x;
+  animation: sky-drift 140s linear infinite;
+}
+
+@keyframes sky-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* ---- 3 宇宙: 遠くの星・星雲・惑星と、またたく星 ---- */
+.s3 {
+  background:
+    /* 惑星（左下）と、その光のふち */
+    radial-gradient(circle at 9% 96%, #6d4bd1 0, #3b2a8a 6%, #1a1245 11%, transparent 11.4%),
+    radial-gradient(circle at 9% 96%, rgba(140, 110, 255, .35) 0, transparent 22%),
+    /* 小さな月（右上） */
+    radial-gradient(circle at 93% 9%, #d8e6ff 0, #7e93c4 1.6%, #2a3558 3%, transparent 3.3%),
+    radial-gradient(circle at 93% 9%, rgba(120, 170, 255, .22) 0, transparent 12%),
+    /* 星雲 */
+    radial-gradient(ellipse 60% 45% at 78% 82%, rgba(255, 90, 170, .16), transparent 70%),
+    radial-gradient(ellipse 55% 50% at 18% 20%, rgba(70, 120, 255, .18), transparent 70%),
+    radial-gradient(ellipse 45% 35% at 55% 55%, rgba(120, 60, 200, .10), transparent 70%),
+    /* 星。大きさの違う小さなタイルを重ねて、繰り返しが目立たないようにする */
+    radial-gradient(1px 1px at 20px 30px, #fff, transparent),
+    radial-gradient(1px 1px at 90px 120px, #cfe4ff, transparent),
+    radial-gradient(1.5px 1.5px at 160px 60px, #fff, transparent),
+    radial-gradient(1px 1px at 40px 170px, #ffe9c7, transparent),
+    radial-gradient(1px 1px at 130px 190px, #fff, transparent),
+    #04050d;
+  background-size: auto, auto, auto, auto, auto, auto, auto, 210px 210px, 210px 210px, 210px 210px, 210px 210px, 210px 210px, auto;
+}
+
+/* またたく星。少し大きくて明るい星だけを別の層にして、まとめて明るさを揺らす。 */
+.s3::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(2px 2px at 60px 80px, #fff, transparent),
+    radial-gradient(2.5px 2.5px at 250px 40px, #bcd8ff, transparent),
+    radial-gradient(2px 2px at 180px 260px, #ffe1b0, transparent),
+    radial-gradient(2px 2px at 330px 210px, #fff, transparent);
+  background-size: 390px 310px;
+  animation: space-twinkle 5s ease-in-out infinite alternate;
+}
+
+@keyframes space-twinkle {
+  from { opacity: .35; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .s2::before,
+  .s3::after { animation: none; }
+}

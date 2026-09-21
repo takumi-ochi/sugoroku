@@ -10,11 +10,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  posLabel, moneyLabel, deltaLabel, rankLabel, roundLabel, roundValue, playersLabel, salaryLabel,
+  posLabel, moneyLabel, deltaLabel, rankLabel, playersLabel, salaryLabel,
   halfwayLabel, moveLabel, rolledLabel, byRank, winnersLabel, rollSummary, effectStyle,
   cardsLabel, statLabel, drewLabel, guardLabel, armedLabel, overLabel, cardStyle,
+  stageLabel, viewLayer, partsCountLabel, climbLabel, goalLabel, climbButtonLabel, partsProgressLabel, PART_MARK,
   SALARY_CHIME, FINISH_CHIME, CARD_CHIME, GUARD_CHIME, HALFWAY_CHIME,
 } from "../../static/shared/format.js";
+import { rulesSections } from "../../static/shared/rules.js";
 import { createDice } from "../../static/shared/dice.js";
 import { walk, createQueue } from "../../static/shared/anim.js";
 import { ringSize, ringLayout } from "../../static/shared/ring.js";
@@ -46,10 +48,8 @@ test("増減は符号つきで出る", () => {
   assert.equal(halfwayLabel(500), "はんぶん通過 +500円");
 });
 
-test("順位とターンの文言", () => {
+test("順位の文言", () => {
   assert.equal(rankLabel(2), "2位");
-  assert.equal(roundValue(3, 10), "3 / 10");
-  assert.equal(roundLabel(3, 10), "ターン 3 / 10");
   assert.equal(playersLabel(4), "4人中");
 });
 
@@ -300,13 +300,108 @@ test("転がすときは向きを変える前に描画を確定させる（直�
   }
 });
 
-/* ---------- 宇宙ステージ ---------- */
+/* ---------- 階層ごとの背景 ---------- */
 
-test("PC画面は宇宙の背景を読み込み、body に背景色を付けない（付けると星が隠れる）", async () => {
+test("両画面が階層の背景を読み込み、body に背景色を付けない（付けると背景が隠れる）", async () => {
   const { readFileSync } = await import("node:fs");
-  const html = readFileSync(new URL("../../static/host.html", import.meta.url), "utf8");
-  assert.ok(html.includes('href="/static/shared/space.css"'));
-  const body = html.match(/\n  body \{([^}]*)\}/)[1];
-  assert.ok(!/background/.test(body.replace(/\/\*.*?\*\//g, "")));
-  assert.ok(existsSync(new URL("../../static/shared/space.css", import.meta.url)));
+  for (const page of ["host", "player"]) {
+    const html = readFileSync(new URL(`../../static/${page}.html`, import.meta.url), "utf8");
+    assert.ok(html.includes('href="/static/shared/stages.css"'), page);
+    assert.ok(html.includes('<body data-stage="1">'), page);
+    for (const s of ["s1", "s2", "s3"]) assert.ok(html.includes(`<i class="${s}"></i>`), `${page} ${s}`);
+    const body = html.match(/\n  body \{([^}]*)\}/)[1];
+    assert.ok(!/background/.test(body.replace(/\/\*.*?\*\//g, "")), page);
+  }
+  const css = readFileSync(new URL("../../static/shared/stages.css", import.meta.url), "utf8");
+  for (const n of [1, 2, 3]) assert.ok(css.includes(`body[data-stage="${n}"] #stagebg .s${n}`), `階層${n}`);
+});
+
+test("背景の階層は、いま手番の人、いなければ最後に振った人、いなければ地上", () => {
+  const players = [{ id: "a", layer: 2 }, { id: "b", layer: 3 }];
+  assert.equal(viewLayer({ players, turn: "b" }), 3);
+  assert.equal(viewLayer({ players, turn: null, last_roll: { id: "a" } }), 2);
+  assert.equal(viewLayer({ players, turn: null, last_roll: null }), 1);
+  assert.equal(viewLayer({ players: [], turn: null }), 1);
+});
+
+/* ---------- 階層とパーツ ---------- */
+
+const STAGES = [
+  { name: "地上", mark: "🌍" }, { name: "天空", mark: "☁️" }, { name: "宇宙", mark: "🚀" },
+];
+
+test("階層は名前と印で出る", () => {
+  assert.equal(stageLabel(1, STAGES), "🌍 地上");
+  assert.equal(stageLabel(3, STAGES), "🚀 宇宙");
+  assert.equal(stageLabel(1, undefined), "");
+});
+
+test("一覧の1行は階層・位置・手札・パーツの順に並ぶ", () => {
+  assert.equal(statLabel({ layer: 2, pos: 5, cards: 1, parts: 2 }, STAGES), "☁️ 天空 / 5 マス / カード 1枚 / パーツ2");
+  assert.equal(statLabel({ layer: 1, pos: 0, cards: 0, parts: 0 }, STAGES), "🌍 地上 / 0 マス");
+  // 階層を渡さないとき（演出中に位置だけ差し替える）は従来どおり
+  assert.equal(statLabel({ pos: 3, cards: 0 }), "3 マス");
+  assert.equal(partsCountLabel(0), "");
+});
+
+test("登った・天国へ旅立った文言", () => {
+  assert.equal(climbLabel({ name: "アオイ", layer: 2 }, STAGES), "アオイ が ☁️ 天空 へ登った！");
+  assert.equal(climbLabel({ name: "アオイ", layer: 3, heaven: true }, STAGES), "アオイ が天国へ旅立った！");
+  assert.equal(climbButtonLabel(1, STAGES), "☁️ 天空 へ登る");
+  assert.equal(climbButtonLabel(3, STAGES), "天国へ旅立つ");   // 最上階では登る先が無い
+  assert.equal(goalLabel("アオイ"), "アオイ が天国へ旅立った！");
+});
+
+test("パーツが何種類そろったかが出る", () => {
+  assert.equal(partsProgressLabel({ right: 1, left: 0, engine: 3 }), "パーツ 2 / 3");
+  assert.equal(partsProgressLabel({ right: 1, left: 1, engine: 1 }), "パーツがそろった！");
+  assert.deepEqual(Object.keys(PART_MARK), ["right", "left", "engine"]);
+});
+
+test("パーツをひいたときはパーツと出る", () => {
+  assert.equal(drewLabel({ kind: "part", label: "右翼" }), "パーツをひいた  右翼");
+  assert.equal(drewLabel({ kind: "guard", label: "おまもり" }), "カードをひいた  おまもり");
+});
+
+/* ---------- ルールのポップアップ ---------- */
+
+const RULE_STATE = {
+  start_money: 1000, card_limit: 3,
+  stages: STAGES,
+  part_kinds: [{ id: "right", label: "右翼" }, { id: "left", label: "左翼" }, { id: "engine", label: "エンジン" }],
+  boards: [
+    { size: 30, half_pos: 15, salary: 200, half_bonus: 1000, squares: [] },
+    { size: 40, half_pos: 20, salary: 2000, half_bonus: 10000, squares: [] },
+    { size: 50, half_pos: 25, salary: 20000, half_bonus: 100000, squares: [] },
+  ],
+};
+
+test("ルールは見出しと文で出て、どの節にも中身がある", () => {
+  const secs = rulesSections(RULE_STATE);
+  assert.ok(secs.length >= 5);
+  for (const s of secs) {
+    assert.ok(s.title, "見出し");
+    assert.ok(s.items.length > 0 && s.items.every((x) => x.length > 0), s.title);
+  }
+});
+
+test("ルールの数字は state から作られ、階層ごとの金額が並ぶ", () => {
+  const text = rulesSections(RULE_STATE).flatMap((s) => s.items).join("\n");
+  assert.ok(text.includes("地上 200円 / 天空 2,000円 / 宇宙 20,000円"));      // 給料
+  assert.ok(text.includes("地上 1,000円 / 天空 10,000円 / 宇宙 100,000円")); // 半周
+  assert.ok(text.includes("1,000円"));                                        // 初期の所持金
+  assert.ok(text.includes("地上 30マス / 天空 40マス / 宇宙 50マス"));        // 盤の広さ
+  assert.ok(text.includes("右翼・左翼・エンジン"));
+  assert.ok(text.includes("手札は3枚まで"));
+  assert.ok(text.includes("天国へ旅立つ"));
+  // 金額を変えると説明も変わる
+  const changed = rulesSections({ ...RULE_STATE, card_limit: 5 }).flatMap((s) => s.items).join("\n");
+  assert.ok(changed.includes("手札は5枚まで"));
+});
+
+test("スマホ画面にルールのボタンとポップアップがある", async () => {
+  const { readFileSync } = await import("node:fs");
+  const html = readFileSync(new URL("../../static/player.html", import.meta.url), "utf8");
+  for (const id of ["rulesbtn", "rules", "rulesbody", "rulesx"]) assert.ok(html.includes(`id="${id}"`), id);
+  assert.ok(html.includes('/static/shared/rules.js'));
 });
