@@ -16,14 +16,11 @@
     display: flex; flex-direction: column;
   }
 
-  header { display: flex; align-items: center; gap: 24px; padding: 14px 28px; border-bottom: 1px solid #22262f; flex: none; }
-  /* 遊んでいる間はQRと参加URLを隠し、盤を画面いっぱいに使う */
-  body.playing header { display: none; }
   body.playing main { padding: 18px 22px; }
 
   /* 開始前はQRだけの画面にする（盤はまだ見せない） */
   #lobby { display: none; }
-  body.waiting header, body.waiting main { display: none; }
+  body.waiting main { display: none; }
   body.waiting #lobby {
     display: flex; flex: 1; min-height: 0; flex-direction: column;
     align-items: center; justify-content: center; gap: 16px; padding: 24px;
@@ -37,9 +34,7 @@
     background: #171a22; font-size: 14px; font-weight: 700; color: var(--c, #8b93a7);
   }
   #lobbyctrl { display: flex; flex-direction: column; gap: 10px; width: min(100%, 420px); }
-  #qr { width: 88px; height: 88px; background: #fff; border-radius: 10px; padding: 6px; flex: none; }
   .lead { font-size: 13px; color: #8b93a7; letter-spacing: .08em; }
-  #url { font-size: 25px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
   #right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
   #conn { display: flex; align-items: center; gap: 9px; font-size: 13px; color: #8b93a7; }
   #dot { width: 9px; height: 9px; border-radius: 50%; background: #f87171; }
@@ -50,7 +45,27 @@
   }
   #mute:hover { border-color: #5c6478; }
 
-  main { flex: 1; display: grid; grid-template-columns: 1fr 340px; gap: 22px; padding: 22px 28px; min-height: 0; }
+  main { flex: 1; display: grid; grid-template-columns: 76px 1fr 340px; gap: 22px; padding: 22px 28px; min-height: 0; }
+
+  /* ---- 左バー。音と接続状態を置く ---- */
+  #rail { display: flex; flex-direction: column; align-items: center; gap: 14px; min-height: 0; }
+  /* 左バーでは縦に積み、いちばん下に寄せる */
+  #rail #right { margin-left: 0; margin-top: auto; flex-direction: column; gap: 12px; width: 100%; }
+  #rail #conn { flex-direction: column; gap: 6px; text-align: center; font-size: 10px; line-height: 1.35; }
+
+  /* ---- QRを大きく出す（左バーのボタンから） ---- */
+  #qrmodal {
+    position: fixed; inset: 0; z-index: 40; background: rgba(8, 10, 14, .95);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  }
+  #qrbig { width: min(62vh, 62vw); height: auto; background: #fff; border-radius: 22px; padding: 20px; }
+  #qrlead { font-size: 17px; color: #8b93a7; letter-spacing: .08em; }
+  #qrurl { font-size: clamp(28px, 3.6vw, 52px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  #qrclose {
+    border: 1px solid #3a4050; background: none; color: #8b93a7; border-radius: 10px;
+    font-size: 15px; font-family: inherit; padding: 11px 26px; cursor: pointer;
+  }
+  #qrclose:hover { border-color: #5c6478; color: #eef0f5; }
 
   /* ---- 盤面（外周に輪として並べる。配置は shared/ring.js） ---- */
   #board { display: grid; gap: 7px; height: 100%; min-height: 0; }
@@ -91,6 +106,8 @@
   .sq.gain .lb { color: #ffd54f; }
   .sq.lose    { background: #2a1618; border-color: #6b2f33; }
   .sq.lose .lb { color: #ff6b7a; }
+  .sq.card    { background: #14202e; border-color: #2f5a86; }
+  .sq.card .lb { color: #79b8ff; }
   .sq.here    { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.3); }
   .sq.flash   { border-color: var(--fc, #fff); box-shadow: 0 0 22px -2px var(--fc, #fff); }
 
@@ -100,14 +117,17 @@
   #turn { font-size: 14px; text-align: center; padding: 10px; border-radius: 10px; background: #171a22; border: 1px solid #262a35; flex: none; }
   #turn b { font-size: 17px; color: var(--c, #eef0f5); }
   #turn .rd { font-size: 12px; color: #8b93a7; font-variant-numeric: tabular-nums; margin-bottom: 3px; letter-spacing: .05em; }
+  #turn .ex { font-size: 12px; font-weight: 700; color: #79b8ff; margin-top: 5px; }
 
   #dice { border: 1px solid #262a35; border-radius: 14px; padding: 14px; text-align: center; background: #171a22; flex: none; }
   #dice .stage { --die: 104px; }
+  #dicerow { display: flex; gap: 16px; align-items: center; justify-content: center; }
+  #dicerow.two .stage { --die: 78px; }
   #who { font-size: 15px; font-weight: 700; color: var(--c, #5c6478); min-height: 1.3em; }
   #mv { font-size: 15px; font-weight: 600; color: #8b93a7; font-variant-numeric: tabular-nums; min-height: 1.3em; }
   #ef { font-size: 14px; font-weight: 700; min-height: 1.3em; }
   #ef.fw { color: #81c784; } #ef.bk { color: #ff9d5c; } #ef.rs { color: #ba8cff; }
-  #ef.gn { color: #ffd54f; } #ef.ls { color: #ff6b7a; }
+  #ef.gn { color: #ffd54f; } #ef.ls { color: #ff6b7a; } #ef.cd { color: #79b8ff; }
 
   #list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; }
   .row {
@@ -156,18 +176,6 @@
 </style>
 </head>
 <body>
-  <header>
-    <img id="qr" src="/qr.svg" alt="参加用QRコード">
-    <div>
-      <div class="lead">スマホでQRを読むか、ブラウザで次を開く</div>
-      <div id="url">…</div>
-    </div>
-    <div id="right">
-      <button id="mute" title="音のオン/オフ">🔊</button>
-      <div id="conn"><span id="dot"></span><span id="cs">未接続</span></div>
-    </div>
-  </header>
-
   <div id="sndhint" hidden>🔈 画面のどこかをクリックすると音が鳴ります</div>
 
   <section id="lobby">
@@ -179,13 +187,23 @@
   </section>
 
   <main>
+    <div id="rail">
+      <div id="right">
+        <button id="mute" title="音のオン/オフ">🔊</button>
+        <div id="conn"><span id="dot"></span><span id="cs">未接続</span></div>
+      </div>
+    </div>
+
     <div id="board">
       <div id="center">
         <div id="turn">参加者を待っています</div>
 
         <div id="dice">
           <div id="who"></div>
-          <div class="stage"><div class="cube" id="cube"></div></div>
+          <div id="dicerow">
+            <div class="stage"><div class="cube" id="cube"></div></div>
+            <div class="stage" id="stage2" hidden><div class="cube" id="cube2"></div></div>
+          </div>
           <div id="mv">サイコロ待ち</div>
           <div id="ef"></div>
         </div>
@@ -210,18 +228,49 @@
     </aside>
   </main>
 
+  <div id="qrmodal" hidden>
+    <div id="qrlead">スマホでQRを読むか、ブラウザで次を開く</div>
+    <img id="qrbig" src="/qr.svg" alt="参加用QRコード">
+    <div id="qrurl">…</div>
+    <button id="qrclose">とじる</button>
+  </div>
+
 <script type="module">
 import { createDice } from "/static/shared/dice.js";
 import * as sound from "/static/shared/sound.js";
 import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
 import { ringSize, ringLayout } from "/static/shared/ring.js";
 import {
-  posLabel, moneyLabel, deltaLabel, rankLabel, roundLabel, salaryLabel, moveLabel, rolledLabel,
-  byRank, winnersLabel, effectStyle, SALARY_CHIME, FINISH_CHIME,
+  moneyLabel, deltaLabel, rankLabel, roundLabel, salaryLabel, halfwayLabel, moveLabel,
+  rolledLabel, byRank, winnersLabel, effectStyle, statLabel, guardLabel, armedLabel, overLabel,
+  SALARY_CHIME, FINISH_CHIME, GUARD_CHIME, HALFWAY_CHIME,
 } from "/static/shared/format.js";
 
 const $ = (id) => document.getElementById(id);
 const dice = createDice($("cube"));
+const dice2 = createDice($("cube2"), true);   // 2個目は無音。転がる音が二重にならないように
+
+/** サイコロの出目。カードで2個になっていれば2つ入る。 */
+function rollValues(r) {
+  return r.values && r.values.length ? r.values : [r.value];
+}
+
+function setDiceCount(n) {
+  $("stage2").hidden = n < 2;
+  $("dicerow").classList.toggle("two", n > 1);
+}
+
+function showDice(values, animate) {
+  setDiceCount(values.length);
+  dice.show(values[0], animate);
+  if (values.length > 1) dice2.show(values[1], animate);
+}
+
+async function rollDice(values) {
+  setDiceCount(values.length);
+  if (values.length > 1) await Promise.all([dice.roll(values[0]), dice2.roll(values[1])]);
+  else await dice.roll(values[0]);
+}
 
 /* ---- 音 ---- */
 $("mute").textContent = sound.isMuted() ? "🔇" : "🔊";
@@ -296,7 +345,12 @@ function drawPanel() {
       : "ゲーム終了";
     t.style.setProperty("--c", win ? win.color : "#eef0f5");
   } else if (cur) {
-    t.innerHTML = `<div class="rd">${roundLabel(s.round, s.rounds)}</div><b>${cur.name}</b> のばん`;
+    // カードを使って待っているのか、溢れたカードを捨てているところなのかを出す
+    const extra = cur.cards > s.card_limit
+      ? overLabel(cur.cards - s.card_limit)
+      : armedLabel(cur);
+    t.innerHTML = `<div class="rd">${roundLabel(s.round, s.rounds)}</div><b>${cur.name}</b> のばん`
+      + (extra ? `<div class="ex">${extra}</div>` : "");
     t.style.setProperty("--c", cur.color);
   }
 
@@ -309,7 +363,7 @@ function drawPanel() {
     const rank = s.phase === "waiting" ? "—" : rankLabel(p.rank);
     row.innerHTML =
       `<span class="rk${s.phase !== "waiting" && p.rank === 1 ? " top" : ""}">${rank}</span>` +
-      `<div class="info"><span class="nm">${p.name}</span><span class="st">${posLabel(p)}</span></div>` +
+      `<div class="info"><span class="nm">${p.name}</span><span class="st">${statLabel(p)}</span></div>` +
       `<span class="mn">${moneyLabel(p.money)}</span>`;
     const kick = document.createElement("button");
     kick.className = "kick"; kick.textContent = "切断";
@@ -337,7 +391,7 @@ function drawPanel() {
     }
   } else {
     document.querySelector("aside").append($("setup"), $("ctrl"));
-    document.querySelector("header").append($("right"));
+    $("rail").append($("right"));
   }
 
   $("start").hidden = playing;
@@ -351,7 +405,9 @@ function drawPanel() {
 // 演出中だけ、その人の行の位置と金額を書き換える。
 function stepRow(pid, pos) {
   const row = document.getElementById("row" + pid);
-  if (row) row.querySelector(".st").textContent = posLabel({ pos });
+  if (!row) return;
+  const p = state.players.find((x) => x.id === pid);
+  row.querySelector(".st").textContent = statLabel({ pos, cards: p ? p.cards : 0 });
 }
 
 function stepMoney(pid, money) {
@@ -364,20 +420,26 @@ function stepMoney(pid, money) {
   el.classList.add("bump");
 }
 
-async function walkToken(pid, steps, onPass) {
+async function walkToken(pid, steps, onPass, onHalf) {
   const to = await walk(shown.get(pid), steps, state.size, (pos, dir, i) => {
     shown.set(pid, pos);
     drawTokens(pid);
     stepRow(pid, pos);
     sound.stepTone(dir, i);
     if (dir > 0 && pos === 0) onPass();
+    if (dir > 0 && pos === state.half_pos) onHalf();
   });
   shown.set(pid, to);
 }
 
 async function apply(s) {
   const first = state === null;
+  // 終わった「瞬間」だけQRを出したいので、切り替わる前の phase を覚えておく。
+  // 途中から開いたとき（first）は出さない。すでに終わっている画面を
+  // 読み込み直すたびに出てくると、結果が見えなくて邪魔になる。
+  const justFinished = !first && state.phase !== "finished" && s.phase === "finished";
   state = s;
+  if (s.phase !== "finished") showQR(false);   // 次のゲームが始まったら引っ込める
   if (first) drawBoard(s);
 
   const r = s.last_roll;
@@ -391,10 +453,11 @@ async function apply(s) {
 
   if (!animate) {
     drawPanel();
-    if (r) { $("who").textContent = r.name; $("mv").textContent = moveLabel(r.from, r.to); dice.show(r.value, false); }
+    if (r) { $("who").textContent = r.name; $("mv").textContent = moveLabel(r.from, r.to); showDice(rollValues(r), false); }
     else { $("who").textContent = ""; $("mv").textContent = "サイコロ待ち"; $("ef").textContent = ""; }
     lastSeq = r ? r.seq : null;
     drawTokens();
+    if (justFinished) showQR(true);   // 「ここで終了」を押したときはこちらを通る
     return;
   }
 
@@ -409,10 +472,10 @@ async function apply(s) {
   $("ef").className = "";
   drawTokens();
 
-  await dice.roll(r.value);
+  await rollDice(rollValues(r));
 
-  // 出目が確定してから駒を動かす
-  $("mv").textContent = rolledLabel(r.value);
+  // 出目が確定してから駒を動かす（value は出目の合計 + カードで足したぶん）
+  $("mv").textContent = rolledLabel(r);
   await sleep(RESULT_MS);
 
   // 表示用の所持金。スタート通過やマスの効果のたびに足していき、最後にサーバーの値で締める。
@@ -425,9 +488,18 @@ async function apply(s) {
     flashSquare(0, "#4dd0e1");
     sound.chime(SALARY_CHIME);
   };
+  // 半分の位置はぴったり止まらなくても通過するだけでもらえる。歩いている途中で判定する。
+  const onHalf = () => {
+    money += s.half_bonus;
+    stepMoney(r.id, money);
+    $("ef").textContent = halfwayLabel(s.half_bonus);
+    $("ef").className = "gn";
+    flashSquare(s.half_pos, "#79b8ff");
+    sound.chime(HALFWAY_CHIME);
+  };
 
   $("mv").textContent = moveLabel(r.from, r.land);
-  await walkToken(r.id, r.value, onPass);
+  await walkToken(r.id, r.value, onPass, onHalf);
 
   if (r.effect) {
     const style = effectStyle(s.board[r.land].kind);
@@ -437,8 +509,17 @@ async function apply(s) {
     sound.chime(style.chime);
     if (r.gain) { money += r.gain; stepMoney(r.id, money); }
     await sleep(EFFECT_MS);
+
+    // おまもりは自動で発動する。誰が持っていたかはここで初めて分かる。
+    if (r.blocked) {
+      $("ef").textContent = guardLabel(r.blocked);
+      $("ef").className = "gn";
+      flashSquare(r.land, "#ffd54f");
+      sound.chime(GUARD_CHIME);
+      await sleep(EFFECT_MS);
+    }
     if (r.shift) {
-      await walkToken(r.id, r.shift, onPass);
+      await walkToken(r.id, r.shift, onPass, onHalf);
       $("mv").textContent = moveLabel(r.from, r.to);
     }
   }
@@ -453,6 +534,12 @@ async function apply(s) {
   // 最後は必ずサーバーの状態で描き直す。ここで手番と順位が更新される。
   drawPanel();
   drawTokens();
+
+  // 最後の1手で終わったとき。優勝者を見せてからQRを前面に出す。
+  if (justFinished) {
+    await sleep(RESULT_MS);
+    showQR(true);
+  }
 }
 
 const queue = createQueue(apply);
@@ -463,16 +550,28 @@ $("finish").onclick = () => {
 };
 $("reset").onclick = () => send({ type: "reset" });
 
+/* ---- 参加用QR。ゲームが終わったら自動で前面に出す。
+ * 出すか出さないかは phase だけで決まるので、開閉のボタンも通信も要らない。
+ * 結果を見たいときのために、押せば閉じられる。
+ */
+function showQR(on) { $("qrmodal").hidden = !on; }
+
+$("qrclose").onclick = () => showQR(false);
+// 背景のどこを押しても閉じる（QRそのものを押したときは閉じない）
+$("qrmodal").onclick = (e) => { if (e.target !== $("qrbig")) showQR(false); };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") showQR(false); });
+
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws/host`);
-  ws.onopen = () => { $("dot").className = "on"; $("cs").textContent = "サーバー接続済み"; };
+  // 文言は左バー（幅76px）にも収まる長さにしてある
+  ws.onopen = () => { $("dot").className = "on"; $("cs").textContent = "接続OK"; };
   ws.onclose = () => {
-    $("dot").className = ""; $("cs").textContent = "サーバー切断 — 再接続中…";
+    $("dot").className = ""; $("cs").textContent = "切断・再接続中";
     setTimeout(connect, 1000);
   };
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === "welcome") $("url").textContent = $("lobbyurl").textContent = msg.join_url;
+    if (msg.type === "welcome") $("qrurl").textContent = $("lobbyurl").textContent = msg.join_url;
     else if (msg.type === "state") queue.push(msg);
   };
 }

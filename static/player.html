@@ -19,9 +19,10 @@
     overscroll-behavior: none; user-select: none;
   }
   header {
-    padding: 12px 18px; display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px 8px 18px; display: flex; align-items: center; gap: 10px;
     border-bottom: 1px solid #262a35; font-size: 14px;
   }
+  #status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #dot { width: 9px; height: 9px; border-radius: 50%; background: #555; flex: none; }
   #dot.on { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
   #dot.off { background: #f87171; }
@@ -29,7 +30,7 @@
     margin-left: auto; background: none; border: 1px solid #3a4050; color: #9aa3b5;
     border-radius: 9px; font-size: 16px; padding: 5px 9px; width: auto; line-height: 1;
   }
-  main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 18px; }
+  main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px 18px; overflow-y: auto; }
 
   /* ---- 名前入力 ---- */
   #entry { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 14px; }
@@ -86,9 +87,7 @@
   #mypos.bump { animation: bump .16s ease; }
   @keyframes bump { 50% { transform: translateY(-4px); color: var(--me, #fff) } }
 
-  #game .stage { --die: 76px; }
-
-  #msg { font-size: 15px; text-align: center; line-height: 1.55; min-height: 3.1em; display: grid; place-items: center; }
+  #msg { font-size: 15px; text-align: center; line-height: 1.55; min-height: 2.7em; display: grid; place-items: center; }
   #msg .big { font-size: 20px; font-weight: 800; }
 
   #roll {
@@ -115,6 +114,85 @@
   #gameend { border-color: #4a3f1e !important; color: #ffd54f !important; }
   #foot button:active { background: #1c1f28; }
 
+  /* ---- サイコロ（画面右上） ---- */
+  #dicebox { flex: none; margin-left: 2px; }
+  #dicerow { display: flex; gap: 9px; align-items: center; }
+  /* 置き場所が狭いので、立方体の余白（既定は 1.45 倍）も詰める */
+  #dicebox .stage { --die: 52px; height: calc(var(--die) * 1.15); }
+  #dicebox #dicerow.two .stage { --die: 42px; }
+
+  /* ---- カード ---- */
+
+  /* カードを使って、次にふるときに効くぶん */
+  #armed {
+    font-size: 12px; font-weight: 700; color: #79b8ff; white-space: nowrap;
+    background: #14202e; border: 1px solid #2f5a86; border-radius: 999px; padding: 5px 13px;
+  }
+
+  #over {
+    width: 100%; text-align: center; font-size: 13px; font-weight: 700; line-height: 1.5;
+    color: #ff9d5c; background: #2a1d14; border: 1px solid #6b4220; border-radius: 12px; padding: 10px 12px;
+  }
+
+  #handbox {
+    width: 100%; background: #171a22; border: 1px solid #262a35;
+    border-radius: 16px; padding: 10px 11px 12px;
+  }
+  #handhead { display: flex; align-items: baseline; margin-bottom: 9px; }
+  #handlb { font-size: 11px; color: #9aa3b5; letter-spacing: .12em; }
+  #handcount {
+    margin-left: auto; font-size: 12px; font-weight: 700; color: #9aa3b5;
+    font-variant-numeric: tabular-nums;
+  }
+  #handcount.full { color: #ff9d5c; }
+  #hand { display: flex; gap: 8px; justify-content: center; }
+  #nohand {
+    width: 100%; text-align: center; font-size: 12px; color: #5c6478; line-height: 1.5;
+    border: 1px dashed #333846; border-radius: 12px; padding: 16px 10px;
+  }
+
+  /* 札。3枚並べても読める大きさにする */
+  .card {
+    flex: 1 1 0; min-width: 0; max-width: 132px; overflow: hidden;
+    padding: 9px 5px 8px; border-radius: 13px; box-shadow: none;
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    background: #1c2430; border: 1px solid #2f5a86; color: #eef0f5;
+  }
+  .card .mk { font-size: 20px; line-height: 1.2; }
+  .card .ttl { font-size: 14px; font-weight: 800; line-height: 1.25; white-space: nowrap; }
+  .card .sh { font-size: 10px; font-weight: 600; color: #9aa3b5; line-height: 1.35; }
+  #hand.tight .card { padding: 8px 4px 7px; }
+  #hand.tight .card .mk { font-size: 17px; }
+  #hand.tight .card .ttl { font-size: 12.5px; }
+  #hand.tight .card .sh { display: none; }
+  .card .tag {
+    margin-top: 6px; font-size: 10px; font-weight: 700; letter-spacing: .06em;
+    padding: 3px 8px; border-radius: 999px; background: #0f1319; color: #9aa3b5;
+  }
+  .card.advance { background: #12241a; border-color: #2c5f3f; }
+  .card.advance .ttl { color: #a5e0aa; }
+  .card.double { background: #14202e; border-color: #2f5a86; }
+  .card.double .ttl { color: #a8d5ff; }
+  .card.guard { background: #241f14; border-color: #6b5a20; }
+  .card.guard .ttl { color: #ffd54f; }
+  .card.ready .tag { background: #4dd0e1; color: #06202b; }
+  .card.drop .tag { background: #ff9d5c; color: #2a1d14; }
+  .card.pick { outline: 2px solid #4dd0e1; outline-offset: 2px; }
+
+  /* 押したカードの説明。画面の下から出す（並びを動かさないため） */
+  #sheet { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; }
+  #sheetbg { position: absolute; inset: 0; background: rgba(8, 10, 14, .66); }
+  #sheetbox {
+    position: relative; width: 100%; background: #1c1f28; border-top: 1px solid #333846;
+    border-radius: 18px 18px 0 0; display: flex; flex-direction: column; gap: 11px;
+    padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  #sheetttl { font-size: 19px; font-weight: 800; }
+  #sheetdesc { font-size: 14px; line-height: 1.6; color: #b9c1d1; }
+  #sheetnote { font-size: 13px; font-weight: 700; color: #ffd54f; line-height: 1.5; }
+  #sheetdrop { background: #ff9d5c; color: #2a1d14; }
+  #sheetclose { background: none; border: 1px solid #3a4050; color: #9aa3b5; font-size: 14px; padding: 12px; }
+
   /* 音がまだ鳴らせないときの案内。タップすれば消える */
   #sndhint {
     position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -127,6 +205,12 @@
   <header>
     <span id="dot"></span><span id="status">接続中…</span>
     <button id="mute" title="音のオン/オフ">🔊</button>
+    <div id="dicebox" hidden>
+      <div id="dicerow">
+        <div class="stage"><div class="cube" id="cube"></div></div>
+        <div class="stage" id="stage2" hidden><div class="cube" id="cube2"></div></div>
+      </div>
+    </div>
   </header>
 
   <main>
@@ -156,9 +240,18 @@
       </div>
 
       <div id="posline">いまのマス <span id="mypos">0 マス</span></div>
-      <div class="stage"><div class="cube" id="cube"></div></div>
       <div id="msg"></div>
+      <div id="armed" hidden></div>
       <button id="roll" disabled>まちのあいだ</button>
+      <div id="over" hidden></div>
+
+      <div id="handbox">
+        <div id="handhead">
+          <span id="handlb">てふだ</span>
+          <span id="handcount"></span>
+        </div>
+        <div id="hand"></div>
+      </div>
 
       <div id="roundbox" hidden>
         <label for="rounds">遊ぶターン数</label>
@@ -174,6 +267,18 @@
     </div>
   </main>
 
+  <div id="sheet" hidden>
+    <div id="sheetbg"></div>
+    <div id="sheetbox">
+      <div id="sheetttl"></div>
+      <div id="sheetdesc"></div>
+      <div id="sheetnote" hidden></div>
+      <button id="sheetuse" hidden>このカードをつかう</button>
+      <button id="sheetdrop" hidden>このカードをすてる</button>
+      <button id="sheetclose">とじる</button>
+    </div>
+  </div>
+
   <div id="sndhint" hidden>🔈 画面をタップすると音が鳴ります</div>
 
 <script type="module">
@@ -181,12 +286,15 @@ import { createDice } from "/static/shared/dice.js";
 import * as sound from "/static/shared/sound.js";
 import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
 import {
-  posLabel, moneyLabel, rankLabel, roundValue, playersLabel, salaryLabel, rolledLabel, rollSummary,
-  winnersLabel, effectStyle, SALARY_CHIME, FINISH_CHIME,
+  posLabel, moneyLabel, rankLabel, roundValue, playersLabel, salaryLabel, halfwayLabel,
+  rolledLabel, rollSummary, winnersLabel, effectStyle, cardStyle, drewLabel, guardLabel,
+  armedLabel, overLabel,
+  SALARY_CHIME, FINISH_CHIME, CARD_CHIME, GUARD_CHIME, HALFWAY_CHIME,
 } from "/static/shared/format.js";
 
 const $ = (id) => document.getElementById(id);
 const dice = createDice($("cube"));
+const dice2 = createDice($("cube2"), true);   // 2個目は無音。転がる音が二重にならないように
 
 /* ---- 音 ---- */
 $("mute").textContent = sound.isMuted() ? "🔇" : "🔊";
@@ -198,13 +306,16 @@ sound.armEnable((ready) => { $("sndhint").hidden = ready || sound.isMuted(); });
 /* ---- 状態 ---- */
 let ws = null, myName = "", myId = null, joined = false, retry = null;
 let state = null, lastSeq = null, firstState = true;
+let picked = null;   // 説明を開いているカードの uid
 
 function setStatus(text, s) { $("status").textContent = text; $("dot").className = s || ""; }
 
 function showEntry(message) {
-  joined = false; myId = null; state = null; lastSeq = null; firstState = true;
+  joined = false; myId = null; state = null; lastSeq = null; firstState = true; picked = null;
+  $("sheet").hidden = true;
   clearTimeout(retry);
   $("game").style.display = "none";
+  $("dicebox").hidden = true;
   $("entry").style.display = "flex";
   $("notice").style.display = message ? "block" : "none";
   $("notice").textContent = message || "";
@@ -231,6 +342,93 @@ function me() {
   return state ? state.players.find((p) => p.id === myId) : null;
 }
 
+/** サイコロの出目。カードで2個になっていれば2つ入る。 */
+function rollValues(r) {
+  return r.values && r.values.length ? r.values : [r.value];
+}
+
+function setDiceCount(n) {
+  $("stage2").hidden = n < 2;
+  $("dicerow").classList.toggle("two", n > 1);
+}
+
+function showDice(values, animate) {
+  setDiceCount(values.length);
+  dice.show(values[0], animate);
+  if (values.length > 1) dice2.show(values[1], animate);
+}
+
+async function rollDice(values) {
+  setDiceCount(values.length);
+  if (values.length > 1) await Promise.all([dice.roll(values[0]), dice2.roll(values[1])]);
+  else await dice.roll(values[0]);
+}
+
+/* ---- カード ----
+ * 手札は state.you に入っていて、自分の画面にしか届かない。
+ * 他の人の画面には枚数（players[].cards）だけが届く。
+ */
+function myHand() { return state && state.you ? state.you.hand : []; }
+function myOver() { return state && state.you ? state.you.over : 0; }
+function myTurn() { return !!state && state.phase === "playing" && state.turn === myId; }
+
+function drawHand() {
+  const hand = myHand(), over = myOver(), you = me();
+
+  $("handcount").textContent = `${hand.length} / ${state.card_limit}`;
+  $("handcount").classList.toggle("full", hand.length >= state.card_limit);
+  $("hand").classList.toggle("tight", hand.length > state.card_limit);
+  $("hand").innerHTML = hand.length
+    ? ""
+    : '<div id="nohand">カードマスに止まるともらえます<br>札をおすと効果が見られます</div>';
+
+  for (const card of hand) {
+    // 表には一言だけ出す。詳しい効果は押したときのシートで見せる。
+    // 溢れているときは、おまもりも含めて全部が「捨てる対象」になる
+    const tag = over ? "すてる" : card.passive ? "じどう" : myTurn() ? "つかう" : "自分の番で";
+    const mood = over ? " drop" : (!card.passive && myTurn()) ? " ready" : "";
+    const el = document.createElement("button");
+    el.className = `card ${cardStyle(card.kind).cls}${mood}${card.uid === picked ? " pick" : ""}`;
+    el.innerHTML =
+      `<span class="mk">${cardStyle(card.kind).mark}</span>` +
+      `<span class="ttl">${card.label}</span>` +
+      `<span class="sh">${card.short || ""}</span>` +
+      `<span class="tag">${tag}</span>`;
+    el.onclick = () => openSheet(card.uid);
+    $("hand").append(el);
+  }
+
+  $("over").hidden = !over;
+  if (over) $("over").textContent = overLabel(over);
+
+  const armed = you ? armedLabel(you) : "";
+  $("armed").hidden = !armed;
+  $("armed").textContent = armed;
+}
+
+function openSheet(uid) { picked = uid; drawHand(); drawSheet(); }
+function closeSheet() { picked = null; $("sheet").hidden = true; drawHand(); }
+
+function drawSheet() {
+  const card = myHand().find((c) => c.uid === picked);
+  if (!card) { closeSheet(); return; }   // 使った・捨てたカードの説明は閉じる
+
+  const over = myOver();
+  $("sheet").hidden = false;
+  $("sheetttl").textContent = card.label;
+  $("sheetdesc").textContent = card.desc;
+  $("sheetuse").hidden = card.passive || over > 0 || !myTurn();
+  $("sheetdrop").hidden = over === 0;
+
+  const note = card.passive
+    ? "持っているだけで自動でつかわれます"
+    : over > 0
+      ? "てふだがいっぱいです。すてるカードをえらんでください"
+      : myTurn() ? "" : "自分の番になったらつかえます";
+  $("sheetnote").hidden = !note;
+  $("sheetnote").textContent = note;
+}
+
 function drawStatic() {
   const s = state, you = me();
   if (!you) return;
@@ -246,9 +444,12 @@ function drawStatic() {
   $("myround").textContent = started ? roundValue(s.round, s.rounds) : "—";
   $("bar").style.width = started ? `${(s.round / s.rounds) * 100}%` : "0%";
 
-  const myTurn = s.phase === "playing" && s.turn === myId;
+  const mine = myTurn();
   const playing = s.phase === "playing";
   const cur = s.players.find((p) => p.id === s.turn);
+
+  drawHand();
+  if (picked) drawSheet();
 
   // 開始と終了はPC画面からでもスマホからでもできる
   $("roll").hidden = !playing;
@@ -266,9 +467,11 @@ function drawStatic() {
     $("msg").innerHTML = `<div><span class="big">${head}</span><br>優勝 ${winnersLabel(s.players) || "—"}<br>` +
       `あなた ${rankLabel(you.rank)}　${moneyLabel(you.money)}</div>`;
     $("roll").disabled = true; $("roll").textContent = "おわり";
-  } else if (myTurn) {
+  } else if (mine) {
+    // 溢れているあいだは振れない。催促は手札の上の帯（#over）が出している。
     $("msg").innerHTML = '<div><span class="big">あなたのばんです</span></div>';
-    $("roll").disabled = false; $("roll").textContent = "サイコロをふる";
+    $("roll").disabled = !!myOver();
+    $("roll").textContent = myOver() ? "カードをすてて" : "サイコロをふる";
   } else {
     const r = s.last_roll;
     $("msg").innerHTML = r && r.id !== myId
@@ -280,11 +483,12 @@ function drawStatic() {
 }
 
 // 自分のマス目を1つずつ動かす。歩いている間は表示用に仮の値を使う。
-function walkMe(from, steps, onPass) {
+function walkMe(from, steps, onPass, onHalf) {
   return walk(from, steps, state.size, (pos, dir, i) => {
     showPos({ pos, resting: false }, true);
     sound.stepTone(dir, i);
     if (dir > 0 && pos === 0) onPass();
+    if (dir > 0 && pos === state.half_pos) onHalf();
   });
 }
 
@@ -299,7 +503,7 @@ async function apply(s) {
   firstState = false;
 
   if (!animate) {
-    if (r) dice.show(r.value, false);
+    if (r) showDice(rollValues(r), false);
     lastSeq = r ? r.seq : null;
     drawStatic();
     return;
@@ -307,10 +511,10 @@ async function apply(s) {
 
   $("roll").disabled = true;
   $("msg").innerHTML = `<div><span class="big">${r.name}</span></div>`;
-  await dice.roll(r.value);
+  await rollDice(rollValues(r));
 
-  // 出目が確定してから駒を動かす
-  $("msg").innerHTML = `<div><span class="big">${rolledLabel(r.value)}</span></div>`;
+  // 出目が確定してから駒を動かす（value は出目の合計 + カードで足したぶん）
+  $("msg").innerHTML = `<div><span class="big">${rolledLabel(r)}</span></div>`;
   await sleep(RESULT_MS);
 
   if (r.id === myId) {
@@ -323,14 +527,34 @@ async function apply(s) {
       $("msg").innerHTML = `<div><span class="big">${salaryLabel(s.salary)}</span></div>`;
       sound.chime(SALARY_CHIME);
     };
+    // 半分の位置はぴったり止まらなくても通過するだけでもらえる。歩いている途中で判定する。
+    const onHalf = () => {
+      money += s.half_bonus;
+      showMoney(money, true);
+      $("msg").innerHTML = `<div><span class="big">${halfwayLabel(s.half_bonus)}</span></div>`;
+      sound.chime(HALFWAY_CHIME);
+    };
 
-    await walkMe(r.from, r.value, onPass);
+    await walkMe(r.from, r.value, onPass, onHalf);
     if (r.effect) {
       $("msg").innerHTML = `<div><span class="big">${r.effect}</span></div>`;
       sound.chime(effectStyle(s.board[r.land].kind).chime);
       if (r.gain) { money += r.gain; showMoney(money, true); }
       await sleep(EFFECT_MS);
-      if (r.shift) await walkMe(r.land, r.shift, onPass);
+
+      // おまもりは自動で発動する。払わずにすんだことを見せる。
+      if (r.blocked) {
+        $("msg").innerHTML = `<div><span class="big">${guardLabel(r.blocked)}</span></div>`;
+        sound.chime(GUARD_CHIME);
+        await sleep(EFFECT_MS);
+      }
+      // 何をひいたかは本人の画面にだけ出る（state.you にしか入っていない）
+      if (r.drew && s.you && s.you.drew) {
+        $("msg").innerHTML = `<div><span class="big">${drewLabel(s.you.drew)}</span></div>`;
+        sound.chime(CARD_CHIME);
+        await sleep(EFFECT_MS);
+      }
+      if (r.shift) await walkMe(r.land, r.shift, onPass, onHalf);
     }
   } else {
     const lines = rollSummary(r);
@@ -374,6 +598,7 @@ function connect() {
       $("notice").style.display = "none";
       $("entry").style.display = "none";
       $("game").style.display = "flex";
+      $("dicebox").hidden = false;
     } else if (msg.type === "state") {
       queue.push(msg);
     } else if (msg.type === "left") {
@@ -399,6 +624,20 @@ $("roll").onclick = () => {
   send({ type: "roll" });
   $("roll").disabled = true;   // 二度押し防止。次のstateで正しい状態に戻る
 };
+
+$("sheetuse").onclick = () => {
+  sound.enable();
+  send({ type: "use", uid: picked });
+  closeSheet();            // 次の state で手札が描き直される
+};
+
+$("sheetdrop").onclick = () => {
+  send({ type: "discard", uid: picked });
+  closeSheet();
+};
+
+$("sheetclose").onclick = closeSheet;
+$("sheetbg").onclick = closeSheet;
 
 $("gamestart").onclick = () => {
   sound.enable();

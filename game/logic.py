@@ -10,6 +10,9 @@
 
 ゴールは無い。盤をぐるぐる回ってお金を集め、
 決めたターン数が終わった時点で所持金の多い人が勝つ。
+
+カードマスに止まるとカードを1枚もらえる。誰が何を持っているかは持ち主にしか
+見せないので、状態の配り方だけが他と違う（_broadcast と _private を見ること）。
 """
 
 from __future__ import annotations
@@ -17,8 +20,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 
-from . import board
-from .events import Event, to_hosts, to_player, to_players
+from . import board, cards
+from .events import Event, to_hosts, to_player
 
 # 参加者に順番に割り当てる色
 COLORS = ["#ff5c7c", "#4dd0e1", "#ffd54f", "#81c784", "#ba8cff", "#ff9d5c"]
@@ -40,6 +43,19 @@ def parse_rounds(value: object, default: int = DEFAULT_ROUNDS) -> int:
     return max(1, min(rounds, MAX_ROUNDS))
 
 
+def _crossings(start: int, steps: int, point: int) -> int:
+    """start から steps だけ前に進む間に、盤の point マスを何回通過したか。
+
+    ちょうど point に止まった場合も1回に数える。盤は一周つながっているので、
+    大きく進めば複数回通過することもある。戻るとき（steps <= 0）は 0。
+    スタート地点（point=0）を通過するたびに給料が出るのと同じ考え方で、
+    半分の位置（board.HALF）を通過するたびに大金がもらえる判定にも使う。
+    """
+    if steps <= 0:
+        return 0
+    return ((start - point) % board.SIZE + steps) // board.SIZE
+
+
 @dataclass
 class Player:
     id: str
@@ -48,8 +64,16 @@ class Player:
     pos: int = 0
     money: int = board.START_MONEY
     resting: bool = False      # 次の番を休む
+    hand: list[cards.Held] = field(default_factory=list)
+    bonus: int = 0             # カードで足す歩数。次にふるときに使われる
+    dice: int = 1              # 次にふるサイコロの数
 
     def to_dict(self) -> dict:
+        """全員に見せる情報。
+
+        手札の中身は入れない。枚数だけは全員に見せる（何枚持っているかは
+        駆け引きの材料になるが、何を持っているかは本人だけの情報）。
+        """
         return {
             "id": self.id,
             "name": self.name,
@@ -57,7 +81,15 @@ class Player:
             "pos": self.pos,
             "money": self.money,
             "resting": self.resting,
+            "cards": len(self.hand),
+            "bonus": self.bonus,
+            "dice": self.dice,
         }
+
+    @property
+    def over(self) -> int:
+        """手札が上限を超えている枚数。0 になるまで捨てないと次にふれない。"""
+        return max(0, len(self.hand) - cards.LIMIT)
 
 
 @dataclass
@@ -72,14 +104,19 @@ class Game:
     last_roll: dict | None = None                    # 直前の出目と移動の記録
     _seq: int = 0
     _rolls: int = 0                                  # サイコロを振った通し番号
+    _cards: int = 0                                  # カードを配った通し番号（uid用）
+    _drew: tuple[str, dict] | None = None            # 直前にカードをひいた人と、その中身
 
     # ---- 状態の受け渡し ------------------------------------------------
 
     def state(self) -> dict:
-        """PC画面・スマホの両方へ送る、いまの全状態。
+        """全員に見せてよい、いまの全状態。
 
         差分ではなく毎回まるごと送る。表示がずれないのと、
         後から画面を開いた人にもそのまま使えるのが理由。
+
+        手札の中身はここに入れない。入れたらPC画面と他の参加者にも
+        見えてしまう。持ち主へは _private() が本人宛にだけ足す。
         """
         ranks = self.ranks()
         return {
@@ -87,6 +124,9 @@ class Game:
             "phase": self.phase,
             "size": board.SIZE,
             "salary": board.SALARY,
+            "half_pos": board.HALF,
+            "half_bonus": board.HALF_BONUS,
+            "card_limit": cards.LIMIT,
             "board": board.to_dict(),
             "turn": self.current,
             "round": self.round,
@@ -105,8 +145,30 @@ class Game:
         }
 
     def _broadcast(self) -> list[Event]:
+        """PC画面へ1通、参加者へは1人ずつ。
+
+        全員に同じものを配れないのは、手札を持ち主にしか見せないため。
+        「みんなに同じ内容」で済んでいたのはカードが無かったときだけ。
+        """
         state = self.state()
-        return [to_hosts(state), to_players(state)]
+        return [
+            to_hosts(state),
+            *(to_player(pid, self._private(pid, state)) for pid in self.order),
+        ]
+
+    def _private(self, player_id: str, state: dict) -> dict:
+        """本人だけに見せる分を足した state。他人の手札は決して入れない。"""
+        player = self.players[player_id]
+        drew = self._drew[1] if self._drew and self._drew[0] == player_id else None
+        return {
+            **state,
+            "you": {
+                "id": player_id,
+                "hand": [held.to_dict() for held in player.hand],
+                "over": player.over,     # 捨てないと次にふれない枚数
+                "drew": drew,            # 直前に自分がひいたカード（演出用）
+            },
+        }
 
     # ---- 参加と退出 ----------------------------------------------------
 
@@ -137,7 +199,7 @@ class Game:
             self.phase = WAITING
             self.current = None
             self.round = 0
-            self.last_roll = None
+            self._clear_roll()
         elif was_current:
             # 手番の人が抜けた。抜けた位置の「ひとつ前」から次を探す。
             self._advance(index - 1)
@@ -156,6 +218,12 @@ class Game:
 
         if kind == "roll":
             return self._roll(player)
+
+        if kind == "use":
+            return self._use(player, message.get("uid", ""))
+
+        if kind == "discard":
+            return self._discard(player, message.get("uid", ""))
 
         # 開始と終了はスマホからもできる。PC画面の前に人がいなくても遊べるように。
         if kind == "start":
@@ -211,7 +279,7 @@ class Game:
         self.phase = PLAYING
         self.current = self.order[0]
         self.round = 1
-        self.last_roll = None
+        self._clear_roll()
         return self._broadcast()
 
     def finish(self) -> list[Event]:
@@ -227,34 +295,54 @@ class Game:
         self.phase = WAITING
         self.current = None
         self.round = 0
-        self.last_roll = None
+        self._clear_roll()
         return self._broadcast()
+
+    def _clear_roll(self) -> None:
+        """直前の出目の記録を消す。本人にだけ送っていたカードの記録も一緒に消す。"""
+        self.last_roll = None
+        self._drew = None
 
     def _reset_players(self) -> None:
         for player in self.players.values():
             player.pos = 0
             player.money = board.START_MONEY
             player.resting = False
+            player.hand.clear()
+            player.bonus = 0
+            player.dice = 1
 
     def _roll(self, player: Player) -> list[Event]:
         if self.phase != PLAYING or self.current != player.id:
             return []   # 自分の番でなければ何もしない
+        if player.over:
+            return []   # 手札が上限を超えている。捨てるまでふれない
 
-        value = self.rng.randint(1, 6)
+        # カードで増やしたサイコロと歩数。1回ふると、どちらも使い切る。
+        values = [self.rng.randint(1, 6) for _ in range(max(1, player.dice))]
+        bonus = player.bonus
+        player.dice = 1
+        player.bonus = 0
+
+        value = sum(values) + bonus
         start = player.pos
         before = player.money
 
         salary = self._move(player, value)
+        half = self._earn(player, _crossings(start, value, board.HALF) * board.HALF_BONUS)
         land = player.pos          # マスの効果を受ける前。ここまでを1マスずつ進む。
 
         square = board.BOARD[land]
         effect = square.label if square.kind not in ("start", "normal") else None
         shift = 0                  # マスの効果で動いた歩数（戻るときは負）
         gain = 0                   # マスの効果で増減した金額
+        blocked = 0                # おまもりで払わずにすんだ金額
+        drew = None                # ひいたカード。中身は本人にしか送らない
 
         if square.kind == "forward":
             shift = square.value
             salary += self._move(player, shift)
+            half += self._earn(player, _crossings(land, shift, board.HALF) * board.HALF_BONUS)
         elif square.kind == "back":
             shift = -square.value
             self._move(player, shift)
@@ -263,14 +351,22 @@ class Game:
         elif square.kind == "gain":
             gain = self._earn(player, square.value)
         elif square.kind == "lose":
-            gain = self._earn(player, -square.value)
+            if self._take_guard(player):
+                blocked = square.value   # おまもりが1枚消えて、支払いは起きない
+            else:
+                gain = self._earn(player, -square.value)
+        elif square.kind == "card":
+            drew = self._draw(player)
 
         self._rolls += 1
+        self._drew = (player.id, drew.to_dict()) if drew else None
         self.last_roll = {
             "seq": self._rolls,    # 画面側が「新しい出目か」を判定するための通し番号
             "id": player.id,
             "name": player.name,
-            "value": value,
+            "value": value,        # 実際に進んだ歩数（出目の合計 + カードのぶん）
+            "values": values,      # サイコロの出目。カードで2個になっていれば2つ入る
+            "bonus": bonus,        # カードで足した歩数
             "from": start,
             "land": land,
             "to": player.pos,
@@ -278,12 +374,72 @@ class Game:
             "effect": effect,
             "before": before,      # 振る前の所持金
             "salary": salary,      # スタート通過でもらった合計
+            "half": half,          # 半分の位置を通過してもらった大金
             "gain": gain,          # マスの効果による増減（実際に動いた額）
+            "blocked": blocked,    # おまもりで無効にした支払い。使ったことは全員に見せる
+            "drew": drew is not None,   # ひいたか。何をひいたかは本人だけ
             "money": player.money,
             "round": self.round,
         }
 
         self._advance(self.order.index(player.id))
+        return self._broadcast()
+
+    # ---- カード --------------------------------------------------------
+
+    def _draw(self, player: Player) -> cards.Held:
+        """カードを1枚配る。上限を超えてもここでは捨てさせない。
+
+        溢れたぶんは本人が選んで捨てる。それまでその人はふれない。
+        """
+        self._cards += 1
+        held = cards.Held(uid=f"c{self._cards}", card=cards.draw(self.rng))
+        player.hand.append(held)
+        return held
+
+    def _take_guard(self, player: Player) -> bool:
+        """おまもりを1枚使う。持っていれば True（支払いは起きない）。
+
+        使うボタンは無い。はらうマスに止まった瞬間に自動で1枚消える。
+        """
+        held = next((h for h in player.hand if h.card.kind == "guard"), None)
+        if held is None:
+            return False
+        player.hand.remove(held)
+        return True
+
+    def _use(self, player: Player, uid: str) -> list[Event]:
+        """カードを使う。効果が出るのは「次にふるとき」。
+
+        自分の番だけ。手札が溢れているときは、先に捨てさせる。
+        """
+        if self.phase != PLAYING or self.current != player.id or player.over:
+            return []
+
+        held = next((h for h in player.hand if h.uid == uid), None)
+        if held is None or held.card.passive:
+            return []   # おまもりは持っているだけで効くので、手では使えない
+
+        if held.card.kind == "advance":
+            player.bonus += held.card.value
+        elif held.card.kind == "double":
+            if player.dice >= held.card.value:
+                return []   # すでにサイコロが増えている。無駄にせず手札に残す
+            player.dice = held.card.value
+        else:
+            return []
+
+        player.hand.remove(held)
+        return self._broadcast()
+
+    def _discard(self, player: Player, uid: str) -> list[Event]:
+        """溢れたぶんを捨てる。溢れていないときは捨てられない。"""
+        if not player.over:
+            return []
+        held = next((h for h in player.hand if h.uid == uid), None)
+        if held is None:
+            return []
+        player.hand.remove(held)
         return self._broadcast()
 
     def _move(self, player: Player, steps: int) -> int:

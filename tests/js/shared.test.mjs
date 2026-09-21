@@ -11,8 +11,9 @@ import assert from "node:assert/strict";
 
 import {
   posLabel, moneyLabel, deltaLabel, rankLabel, roundLabel, roundValue, playersLabel, salaryLabel,
-  moveLabel, rolledLabel, byRank, winnersLabel, rollSummary, effectStyle,
-  SALARY_CHIME, FINISH_CHIME,
+  halfwayLabel, moveLabel, rolledLabel, byRank, winnersLabel, rollSummary, effectStyle,
+  cardsLabel, statLabel, drewLabel, guardLabel, armedLabel, overLabel, cardStyle,
+  SALARY_CHIME, FINISH_CHIME, CARD_CHIME, GUARD_CHIME, HALFWAY_CHIME,
 } from "../../static/shared/format.js";
 import { walk, createQueue } from "../../static/shared/anim.js";
 import { ringSize, ringLayout } from "../../static/shared/ring.js";
@@ -39,6 +40,7 @@ test("増減は符号つきで出る", () => {
   assert.equal(deltaLabel(200), "+200円");
   assert.equal(deltaLabel(-1500), "-1,500円");
   assert.equal(salaryLabel(200), "スタート通過 +200円");
+  assert.equal(halfwayLabel(500), "はんぶん通過 +500円");
 });
 
 test("順位とターンの文言", () => {
@@ -63,7 +65,43 @@ test("優勝者は1位全員の名前", () => {
 
 test("移動と出目の文言", () => {
   assert.equal(moveLabel(27, 3), "27 → 3");
-  assert.equal(rolledLabel(4), "4 が出た");
+  assert.equal(rolledLabel({ value: 4, values: [4] }), "4 が出た");
+});
+
+test("サイコロ2個とカードのぶんは足し算で出る", () => {
+  assert.equal(rolledLabel({ value: 9, values: [4, 5] }), "4 + 5 = 9");
+  assert.equal(rolledLabel({ value: 6, values: [4], bonus: 2 }), "4 + カード+2 = 6");
+  assert.equal(rolledLabel({ value: 11, values: [4, 5], bonus: 2 }), "4 + 5 + カード+2 = 11");
+  // values が無い古い形でも落ちない
+  assert.equal(rolledLabel({ value: 3 }), "3 が出た");
+});
+
+test("カードの文言", () => {
+  assert.equal(cardsLabel(2), "カード 2枚");
+  assert.equal(drewLabel({ label: "+2マス" }), "カードをひいた  +2マス");
+  assert.equal(guardLabel(300), "おまもり  300円 払わずにすんだ");
+  assert.equal(overLabel(1), "カードを 1枚 すててください");
+});
+
+test("一覧の1行は位置と枚数を同じ関数が作る", () => {
+  assert.equal(statLabel({ pos: 5, cards: 0 }), "5 マス");
+  assert.equal(statLabel({ pos: 5, cards: 2 }), "5 マス / カード 2枚");
+  assert.equal(statLabel({ pos: 9, resting: true, cards: 1 }), "9 マス / 一回休み / カード 1枚");
+});
+
+test("カードの種類ごとに印と色が決まる", () => {
+  assert.equal(cardStyle("advance").cls, "advance");
+  assert.equal(cardStyle("double").cls, "double");
+  assert.equal(cardStyle("guard").cls, "guard");
+  // 知らない種類でも札が描ける
+  assert.ok(cardStyle("なにか").mark);
+});
+
+test("使ったカードの効果は手番の表示に出る", () => {
+  assert.equal(armedLabel({ dice: 1, bonus: 0 }), "");
+  assert.equal(armedLabel({ dice: 2, bonus: 0 }), "サイコロ2個");
+  assert.equal(armedLabel({ dice: 1, bonus: 3 }), "+3マス");
+  assert.equal(armedLabel({ dice: 2, bonus: 2 }), "サイコロ2個・+2マス");
 });
 
 test("他人の手番のまとめは給料と効果を順に足す", () => {
@@ -77,16 +115,38 @@ test("他人の手番のまとめは給料と効果を順に足す", () => {
   );
 });
 
+test("半分の位置を通過したことも他の人に見える", () => {
+  assert.deepEqual(
+    rollSummary({ name: "アオイ", value: 10, from: 10, to: 20, effect: null, half: 500 }),
+    ["アオイ  10", "10 → 20", "はんぶん通過 +500円"],
+  );
+});
+
+test("おまもりが止めた支払いは他の人にも見える", () => {
+  assert.deepEqual(
+    rollSummary({ name: "アオイ", value: 3, from: 2, to: 5, effect: "はらう -100円", blocked: 100 }),
+    ["アオイ  3", "2 → 5", "はらう -100円", "おまもり  100円 払わずにすんだ"],
+  );
+});
+
+test("何のカードをひいたかはまとめに出ない", () => {
+  // 持ち主以外の画面が使う関数。マスの名前までしか出さない
+  const lines = rollSummary({ name: "アオイ", value: 1, from: 0, to: 1, effect: "カードをひく", drew: true });
+  assert.deepEqual(lines, ["アオイ  1", "0 → 1", "カードをひく"]);
+});
+
 test("マスの種類ごとに色と音が決まる", () => {
   assert.equal(effectStyle("forward").cls, "fw");
   assert.equal(effectStyle("back").cls, "bk");
   assert.equal(effectStyle("rest").cls, "rs");
   assert.equal(effectStyle("gain").cls, "gn");
   assert.equal(effectStyle("lose").cls, "ls");
+  assert.equal(effectStyle("card").cls, "cd");
   // 知らない種類でも落ちない
   assert.ok(Array.isArray(effectStyle("なにか").chime));
   assert.equal(SALARY_CHIME.length, 2);
   assert.equal(FINISH_CHIME.length, 3);
+  assert.ok(Array.isArray(CARD_CHIME) && Array.isArray(GUARD_CHIME) && Array.isArray(HALFWAY_CHIME));
 });
 
 /* ---------- 1マスずつの移動 ---------- */

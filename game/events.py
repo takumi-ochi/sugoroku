@@ -28,6 +28,11 @@ def to_hosts(payload: dict) -> Event:
 
 
 def to_players(payload: dict) -> Event:
+    """全員に同じ内容を配る。
+
+    いまのゲームは使っていない。手札を持ち主にしか見せないので、
+    参加者へは1人ずつ内容を変えて送っている（game/logic.py の _broadcast）。
+    """
     return Event(PLAYERS, payload)
 
 

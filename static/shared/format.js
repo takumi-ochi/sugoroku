@@ -45,14 +45,59 @@ export function salaryLabel(amount) {
   return `スタート通過 ${deltaLabel(amount)}`;
 }
 
+/** コースの半分を通過したときの表示。ぴったり止まらなくてももらえる。 */
+export function halfwayLabel(amount) {
+  return `はんぶん通過 ${deltaLabel(amount)}`;
+}
+
 /** 移動の表示。from と to は必ずサーバーから来た値を渡すこと。 */
 export function moveLabel(from, to) {
   return `${from} → ${to}`;
 }
 
-/** 出目が確定したときの表示。 */
-export function rolledLabel(value) {
-  return `${value} が出た`;
+/** 出目が確定したときの表示。
+ *
+ * サイコロ2個やカードで足したぶんがあるときは、足し算をそのまま見せる。
+ * 引数は last_roll まるごと（value だけでは2個ふったことが分からない）。
+ */
+export function rolledLabel(roll) {
+  const parts = [...(roll.values || [roll.value])];
+  if (roll.bonus) parts.push(`カード+${roll.bonus}`);
+  if (parts.length === 1) return `${roll.value} が出た`;
+  return `${parts.join(" + ")} = ${roll.value}`;
+}
+
+/** 手札の枚数。0枚のときは呼ばない（呼び出し側で出し分ける）。 */
+export function cardsLabel(count) {
+  return `カード ${count}枚`;
+}
+
+/** 参加者一覧の1行に添える、位置と手札の枚数。持っていないときは位置だけ。 */
+export function statLabel(player) {
+  return player.cards ? `${posLabel(player)} / ${cardsLabel(player.cards)}` : posLabel(player);
+}
+
+/** カードをひいたときの表示。中身が見えるのは持ち主の画面だけ。 */
+export function drewLabel(card) {
+  return `カードをひいた  ${card.label}`;
+}
+
+/** おまもりで支払いを無効にしたときの表示。 */
+export function guardLabel(amount) {
+  return `おまもり  ${moneyLabel(amount)} 払わずにすんだ`;
+}
+
+/** カードを使って、次にふるときに効くぶん。何も無ければ空文字。 */
+export function armedLabel(player) {
+  const parts = [];
+  if (player.dice > 1) parts.push(`サイコロ${player.dice}個`);
+  if (player.bonus) parts.push(`+${player.bonus}マス`);
+  return parts.join("・");
+}
+
+/** 手札が上限を超えているときの催促。 */
+export function overLabel(count) {
+  return `カードを ${count}枚 すててください`;
 }
 
 /** 順位の順に並べる。同じ順位なら参加順のまま。 */
@@ -69,7 +114,9 @@ export function winnersLabel(players) {
 export function rollSummary(roll) {
   const lines = [`${roll.name}  ${roll.value}`, moveLabel(roll.from, roll.to)];
   if (roll.salary) lines.push(salaryLabel(roll.salary));
+  if (roll.half) lines.push(halfwayLabel(roll.half));
   if (roll.effect) lines.push(roll.effect);
+  if (roll.blocked) lines.push(guardLabel(roll.blocked));
   return lines;
 }
 
@@ -81,11 +128,27 @@ const SQUARE = {
   rest: { cls: "rs", color: "#ba8cff", chime: [500, 500] },
   gain: { cls: "gn", color: "#ffd54f", chime: [784, 1047] },
   lose: { cls: "ls", color: "#ff6b7a", chime: [440, 330] },
+  card: { cls: "cd", color: "#79b8ff", chime: [700, 1050, 1400] },
 };
 
 export function effectStyle(kind) {
   return SQUARE[kind] || { cls: "", color: "#ffd54f", chime: [500, 500] };
 }
 
+/* ---- カードの種類ごとの印と色 ---- */
+
+const CARD = {
+  advance: { cls: "advance", mark: "⏩" },
+  double: { cls: "double", mark: "🎲" },
+  guard: { cls: "guard", mark: "🛡" },
+};
+
+export function cardStyle(kind) {
+  return CARD[kind] || { cls: "", mark: "🂠" };
+}
+
 export const SALARY_CHIME = [880, 1175];
 export const FINISH_CHIME = [660, 880, 1320];
+export const CARD_CHIME = [740, 988, 1319];     // カードを使った
+export const GUARD_CHIME = [1047, 784, 1047];   // おまもりが支払いを止めた
+export const HALFWAY_CHIME = [660, 988, 1568];  // 半分の位置を通過した（大金なので目立つ音）

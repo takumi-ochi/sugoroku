@@ -20,8 +20,12 @@ const FACE = { 1: [0, 0], 2: [-90, 0], 3: [0, -90], 4: [0, 90], 5: [90, 0], 6: [
 
 export const ROLL_MS = 1000;
 
-/** el（.cube）の中に6面を作り、操作用の関数を返す。 */
-export function createDice(el) {
+/** el（.cube）の中に6面を作り、操作用の関数を返す。
+ *
+ * silent を true にすると音を鳴らさない。カードでサイコロが2個になったとき、
+ * 2個目をこれで作る。両方が鳴らすと転がる音が二重になって濁る。
+ */
+export function createDice(el, silent = false) {
   for (const v of [1, 2, 3, 4, 5, 6]) {
     const face = document.createElement("div");
     face.className = "face f" + v;
@@ -43,13 +47,13 @@ export function createDice(el) {
   }
 
   async function roll(value) {
-    rattle();
+    if (!silent) rattle();
     el.classList.add("shake");
     spins += 3 + Math.floor(Math.random() * 2);
     show(value, true);
     await sleep(ROLL_MS);
     el.classList.remove("shake");
-    thud();
+    if (!silent) thud();
     await sleep(120);
   }
 
