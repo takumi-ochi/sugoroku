@@ -42,6 +42,10 @@ export function createDice(el, silent = false) {
 
   function show(value, animate) {
     const [x, y] = FACE[value] || FACE[1];
+    // 2個目は直前まで display:none だった。表示にした同じ瞬間に transform を変えると、
+    // ブラウザは「変わった」と気づけず、転がらずに最終の面へ飛ぶ。
+    // 先に読み取りで描画を確定させて、いまの向きから回り始めさせる。
+    if (animate) void el.offsetWidth;
     el.style.transition = animate ? `transform ${ROLL_MS}ms cubic-bezier(.15,.85,.25,1)` : "none";
     el.style.transform = `rotateX(${x + 360 * spins}deg) rotateY(${y + 360 * spins}deg)`;
   }
