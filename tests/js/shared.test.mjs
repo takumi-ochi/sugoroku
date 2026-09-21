@@ -19,7 +19,7 @@ import {
 import { rulesSections } from "../../static/shared/rules.js";
 import { createDice } from "../../static/shared/dice.js";
 import { walk, createQueue } from "../../static/shared/anim.js";
-import { ringSize, ringLayout } from "../../static/shared/ring.js";
+import { ringSize, ringLayout, windingLayout, WINDING } from "../../static/shared/ring.js";
 import * as sound from "../../static/shared/sound.js";
 import { existsSync } from "node:fs";
 
@@ -404,4 +404,66 @@ test("スマホ画面にルールのボタンとポップアップがある", as
   const html = readFileSync(new URL("../../static/player.html", import.meta.url), "utf8");
   for (const id of ["rulesbtn", "rules", "rulesbody", "rulesx"]) assert.ok(html.includes(`id="${id}"`), id);
   assert.ok(html.includes('/static/shared/rules.js'));
+});
+
+/* ---------- くねくねの盤（2層目・3層目） ---------- */
+
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+test("くねくねの盤は2層目と3層目だけで、1層目は四角い輪のまま", () => {
+  assert.equal(WINDING[1], undefined);
+  assert.ok(WINDING[2] && WINDING[3]);
+});
+
+test("くねくねの盤はマス数ぶんの点を、盤の中に、輪にして並べる", () => {
+  for (const [layer, size] of [[2, 40], [3, 50]]) {
+    for (const [w, h] of [[1100, 860], [1500, 800], [1000, 700]]) {
+      const { points, tile, spacing } = windingLayout(size, w, h, WINDING[layer]);
+      const tag = `${layer}層 ${w}x${h}`;
+
+      assert.equal(points.length, size, tag);
+      for (const p of points) {
+        assert.ok(p.x >= tile / 2 - 2 && p.x <= w - tile / 2 + 2, `${tag} x=${p.x}`);
+        assert.ok(p.y >= tile / 2 - 2 && p.y <= h - tile / 2 + 2, `${tag} y=${p.y}`);
+      }
+      // 最後のマスの次はマス0に戻る（ループ）。つなぎ目も他と同じ間隔になる
+      assert.ok(Math.abs(dist(points[size - 1], points[0]) - spacing) < spacing * 0.15, `${tag} つなぎ目`);
+    }
+  }
+});
+
+test("くねくねの盤はマスが重ならない（円の直径より離れている）", () => {
+  for (const [layer, size] of [[2, 40], [3, 50]]) {
+    for (const [w, h] of [[1100, 860], [1300, 860], [1000, 700], [1500, 800], [900, 900]]) {
+      const { points, tile } = windingLayout(size, w, h, WINDING[layer]);
+      for (let a = 0; a < size; a++) {
+        for (let b = a + 1; b < size; b++) {
+          assert.ok(dist(points[a], points[b]) >= tile - 0.01, `${layer}層 ${w}x${h} ${a}-${b}`);
+        }
+      }
+    }
+  }
+});
+
+test("くねくねの盤は左上から時計回りで、ただの楕円ではなくうねっている", () => {
+  const w = 1100, h = 860;
+  const { points } = windingLayout(50, w, h, WINDING[3]);
+
+  assert.ok(points[0].x < w / 2 && points[0].y < h / 2);          // マス0は左上
+  let area = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i], b = points[(i + 1) % points.length];
+    area += a.x * b.y - b.x * a.y;
+  }
+  assert.ok(area > 0);                                             // 画面の座標（下が正）で正 = 時計回り
+  // 中心からの距離が場所によって大きく違う = くねくねしている
+  const d = points.map((p) => Math.hypot((p.x - w / 2) / (w / 2), (p.y - h / 2) / (h / 2)));
+  assert.ok(Math.max(...d) - Math.min(...d) > 0.1);
+});
+
+test("PC画面は2層目以降でくねくねの配置を使う", async () => {
+  const { readFileSync } = await import("node:fs");
+  const html = readFileSync(new URL("../../static/host.html", import.meta.url), "utf8");
+  assert.ok(html.includes("windingLayout"));
+  assert.ok(html.includes("#board.winding"));
 });

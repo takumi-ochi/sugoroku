@@ -87,6 +87,24 @@
   #board.dense .sq .tokens { gap: 2px; }
   #board.dense .tk { width: 16px; height: 16px; font-size: 9px; }
 
+  /* 2層目・3層目の盤は、くねくねした輪（配置は shared/ring.js の windingLayout）。
+     マスは円形で、絶対位置に置く。輪の内側の手番とサイコロは、盤の真ん中に浮かべる。 */
+  #board.winding { display: block; position: relative; }
+  #board.winding #center {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(44%, 420px); padding: 0; z-index: 2;
+  }
+  #board.winding .sq {
+    position: absolute; border-radius: 50%; padding: 2px; align-items: center; justify-content: center;
+    text-align: center; gap: 0; z-index: 1;
+  }
+  #board.winding .sq .no { font-size: calc(var(--fs) - 2px); line-height: 1; }
+  #board.winding .sq .lb { font-size: var(--fs); line-height: 1.15; margin-top: 0; }
+  #board.winding .sq .tokens { margin-top: 1px; justify-content: center; gap: 2px; }
+  #board.winding .tk { width: var(--tk); height: var(--tk); font-size: calc(var(--tk) * .55); }
+  #track { position: absolute; left: 0; top: 0; pointer-events: none; }
+  #track path { fill: none; stroke: rgba(255, 255, 255, .16); stroke-width: 10; stroke-linejoin: round; stroke-dasharray: 2 12; stroke-linecap: round; }
+
   /* 輪の内側。手番とサイコロを置く */
   #center {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -251,7 +269,7 @@
 import { createDice } from "/static/shared/dice.js";
 import * as sound from "/static/shared/sound.js";
 import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
-import { ringSize, ringLayout } from "/static/shared/ring.js";
+import { ringSize, ringLayout, windingLayout, WINDING } from "/static/shared/ring.js";
 import {
   moneyLabel, deltaLabel, rankLabel, salaryLabel, halfwayLabel, moveLabel,
   rolledLabel, byRank, winnersLabel, effectStyle, statLabel, guardLabel, armedLabel, overLabel,
@@ -307,21 +325,53 @@ function boardOf(s, layer) { return s.boards[layer - 1]; }
 function drawBoard(s, layer) {
   const board = $("board"), center = $("center");
   const info = boardOf(s, layer), squares = info.squares;
-  board.classList.toggle("dense", squares.length > 40);
-  const { cols, rows } = ringSize(squares.length);
-  const cells = ringLayout(squares.length);
-  board.querySelectorAll(".sq").forEach((el) => el.remove());
-  board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  board.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
-  center.style.gridArea = `2 / 2 / ${rows} / ${cols}`;
+  const winding = !!WINDING[layer];
+  board.querySelectorAll(".sq, #track").forEach((el) => el.remove());
+  board.classList.toggle("winding", winding);
+  board.classList.toggle("dense", !winding && squares.length > 40);
+
+  let cells = null, wind = null;
+  if (winding) {
+    // くねくねの輪は盤の大きさ（ピクセル）から配置を決める。まだ大きさが無ければ描かない。
+    const w = board.clientWidth, h = board.clientHeight;
+    if (!w || !h) { viewL = 0; return; }
+    wind = windingLayout(squares.length, w, h, WINDING[layer]);
+    board.style.gridTemplateColumns = board.style.gridTemplateRows = "";
+    center.style.gridArea = "";
+    board.style.setProperty("--fs", (wind.tile >= 80 ? 11 : wind.tile >= 66 ? 10 : wind.tile >= 58 ? 9 : 8) + "px");
+    board.style.setProperty("--tk", Math.max(12, Math.round(wind.tile * 0.27)) + "px");
+    // 曲線そのものを、薄い点線の道として敷く
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.id = "track";
+    svg.setAttribute("width", w);
+    svg.setAttribute("height", h);
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", wind.path.map((q, i) => `${i ? "L" : "M"}${q.x.toFixed(1)} ${q.y.toFixed(1)}`).join(" ") + " Z");
+    svg.append(path);
+    board.append(svg);
+  } else {
+    const { cols, rows } = ringSize(squares.length);
+    cells = ringLayout(squares.length);
+    board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    board.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+    center.style.gridArea = `2 / 2 / ${rows} / ${cols}`;
+  }
 
   squares.forEach((sq, i) => {
     const el = document.createElement("div");
     el.className = "sq " + sq.kind;
     el.id = "sq" + i;
-    el.style.gridRow = cells[i].row;
-    el.style.gridColumn = cells[i].col;
-    const label = sq.kind === "start" ? `${sq.label}<br>通過 ${deltaLabel(info.salary)}` : sq.label;
+    if (winding) {
+      el.style.left = `${wind.points[i].x - wind.tile / 2}px`;
+      el.style.top = `${wind.points[i].y - wind.tile / 2}px`;
+      el.style.width = el.style.height = `${wind.tile}px`;
+    } else {
+      el.style.gridRow = cells[i].row;
+      el.style.gridColumn = cells[i].col;
+    }
+    let label = sq.kind === "start" ? `${sq.label}<br>通過 ${deltaLabel(info.salary)}` : sq.label;
+    if (winding && sq.kind !== "start" && label) label = label.replace(" ", "<br>");   // 円の中で2行にする
     el.innerHTML = `<div class="no">${i}</div><div class="lb">${label || ""}</div><div class="tokens"></div>`;
     board.append(el);
   });
@@ -335,6 +385,18 @@ function setView(layer) {
   drawBoard(state, layer);
   drawTokens();
 }
+
+// 画面の大きさが変わったら、くねくねの盤は大きさから配置し直す（四角い輪はCSSが追従する）
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!state || !WINDING[viewL]) return;
+    const layer = viewL;
+    viewL = 0;
+    setView(layer);
+  }, 150);
+});
 
 function drawTokens(hopId) {
   if (!state) return;
