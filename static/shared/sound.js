@@ -13,6 +13,12 @@ let ctx = null;
 let noiseBuf = null;
 let muted = false;
 
+/* BGM。効果音は合成だが、こちらは曲なので音声ファイルを <audio> で流す。 */
+const BGM_URL = "/static/shared/audio/bgm.ogg";
+const BGM_VOLUME = 0.25;   // 効果音（チャイム）が埋もれない大きさ
+let bgm = null;
+let bgmWanted = false;
+
 try {
   muted = localStorage.getItem("mute") === "1";
 } catch (e) {
@@ -64,9 +70,32 @@ function disarm() {
   document.removeEventListener("visibilitychange", onVisible);
 }
 
+/** 流したい状態（bgmWanted）と、鳴らせる状態（操作済み・ミュートでない）を突き合わせる。 */
+function syncBgm() {
+  if (typeof Audio === "undefined") return;
+  if (bgmWanted && !muted && isReady()) {
+    if (!bgm) {
+      bgm = new Audio(BGM_URL);
+      bgm.loop = true;
+      bgm.volume = BGM_VOLUME;
+    }
+    if (bgm.paused) bgm.play().catch(() => { /* 操作前は失敗する。次の操作でまた試す */ });
+  } else if (bgm && !bgm.paused) {
+    bgm.pause();
+  }
+}
+
+/** BGMを流す／止める。止めたあと流し直すと曲の頭から始まる。 */
+export function setBgm(on) {
+  bgmWanted = !!on;
+  if (!bgmWanted && bgm) bgm.currentTime = 0;
+  syncBgm();
+}
+
 function announce() {
   const ready = isReady();
   if (ready) disarm();               // 鳴るようになったら待ち受けをやめる
+  syncBgm();                         // 操作で鳴らせるようになった／ミュートが変わった
   for (const fn of watchers) fn(ready);
 }
 

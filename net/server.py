@@ -27,6 +27,7 @@ MEDIA_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".svg": "image/svg+xml",
     ".json": "application/json",
+    ".ogg": "audio/ogg",
 }
 
 

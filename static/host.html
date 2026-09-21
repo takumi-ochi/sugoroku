@@ -223,6 +223,7 @@
       <div id="ctrl">
         <button id="start" disabled>ゲーム開始</button>
         <button id="finish" hidden>ここで終了</button>
+        <button id="showqr" hidden>ゲーム終了</button>
         <button id="reset">リセット</button>
       </div>
     </aside>
@@ -396,6 +397,7 @@ function drawPanel() {
 
   $("start").hidden = playing;
   $("finish").hidden = !playing;
+  $("showqr").hidden = s.phase !== "finished";
   $("setup").hidden = playing;
   $("start").disabled = !s.players.length;
   $("start").textContent = s.phase === "finished" ? "もう一度あそぶ" : "ゲーム開始";
@@ -434,11 +436,8 @@ async function walkToken(pid, steps, onPass, onHalf) {
 
 async function apply(s) {
   const first = state === null;
-  // 終わった「瞬間」だけQRを出したいので、切り替わる前の phase を覚えておく。
-  // 途中から開いたとき（first）は出さない。すでに終わっている画面を
-  // 読み込み直すたびに出てくると、結果が見えなくて邪魔になる。
-  const justFinished = !first && state.phase !== "finished" && s.phase === "finished";
   state = s;
+  sound.setBgm(s.phase === "playing");        // BGMは遊んでいる間だけ
   if (s.phase !== "finished") showQR(false);   // 次のゲームが始まったら引っ込める
   if (first) drawBoard(s);
 
@@ -457,7 +456,6 @@ async function apply(s) {
     else { $("who").textContent = ""; $("mv").textContent = "サイコロ待ち"; $("ef").textContent = ""; }
     lastSeq = r ? r.seq : null;
     drawTokens();
-    if (justFinished) showQR(true);   // 「ここで終了」を押したときはこちらを通る
     return;
   }
 
@@ -534,12 +532,6 @@ async function apply(s) {
   // 最後は必ずサーバーの状態で描き直す。ここで手番と順位が更新される。
   drawPanel();
   drawTokens();
-
-  // 最後の1手で終わったとき。優勝者を見せてからQRを前面に出す。
-  if (justFinished) {
-    await sleep(RESULT_MS);
-    showQR(true);
-  }
 }
 
 const queue = createQueue(apply);
@@ -550,12 +542,13 @@ $("finish").onclick = () => {
 };
 $("reset").onclick = () => send({ type: "reset" });
 
-/* ---- 参加用QR。ゲームが終わったら自動で前面に出す。
- * 出すか出さないかは phase だけで決まるので、開閉のボタンも通信も要らない。
- * 結果を見たいときのために、押せば閉じられる。
+/* ---- 参加用QR。ゲームが終わっても自動では出さない。
+ * 結果を見終わって「ゲーム終了」ボタンを押したときだけ前面に出す。
+ * 押せば閉じられる。もう一度始めれば自動で引っ込む。
  */
 function showQR(on) { $("qrmodal").hidden = !on; }
 
+$("showqr").onclick = () => showQR(true);
 $("qrclose").onclick = () => showQR(false);
 // 背景のどこを押しても閉じる（QRそのものを押したときは閉じない）
 $("qrmodal").onclick = (e) => { if (e.target !== $("qrbig")) showQR(false); };

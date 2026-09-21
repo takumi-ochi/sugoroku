@@ -15,8 +15,11 @@ import {
   cardsLabel, statLabel, drewLabel, guardLabel, armedLabel, overLabel, cardStyle,
   SALARY_CHIME, FINISH_CHIME, CARD_CHIME, GUARD_CHIME, HALFWAY_CHIME,
 } from "../../static/shared/format.js";
+import { createDice } from "../../static/shared/dice.js";
 import { walk, createQueue } from "../../static/shared/anim.js";
 import { ringSize, ringLayout } from "../../static/shared/ring.js";
+import * as sound from "../../static/shared/sound.js";
+import { existsSync } from "node:fs";
 
 /* ---------- 表示文言 ---------- */
 
@@ -263,4 +266,36 @@ test("溜まりすぎたら間引いて最新に追いつく", () => {
     assert.equal(done.at(-1), 9);             // 最新は必ず処理する
     assert.ok(done.length <= 4, `処理しすぎ: ${done}`);   // 間引いて追いつく
   });
+});
+
+/* ---------- BGM ---------- */
+
+test("BGMの曲ファイルが置いてある", () => {
+  assert.ok(existsSync(new URL("../../static/shared/audio/bgm.ogg", import.meta.url)));
+});
+
+test("ブラウザ以外でBGMを流す・止めるを呼んでも落ちない", () => {
+  sound.setBgm(true);
+  sound.setBgm(false);
+});
+
+/* ---------- サイコロ ---------- */
+
+test("転がすときは向きを変える前に描画を確定させる（直前まで非表示の2個目も回る）", async () => {
+  const log = [];
+  const el = {
+    style: new Proxy({}, { set(o, k, v) { if (k === "transform") log.push("transform"); o[k] = v; return true; } }),
+    classList: { add() {}, remove() {} },
+    append() {},
+    get offsetWidth() { log.push("reflow"); return 0; },
+  };
+  globalThis.document = { createElement: () => ({ className: "", append() {} }) };
+  try {
+    const die = createDice(el, true);
+    log.length = 0;
+    await die.roll(4);
+    assert.deepEqual(log, ["reflow", "transform"]);
+  } finally {
+    delete globalThis.document;
+  }
 });
