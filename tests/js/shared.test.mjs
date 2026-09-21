@@ -299,3 +299,14 @@ test("転がすときは向きを変える前に描画を確定させる（直�
     delete globalThis.document;
   }
 });
+
+/* ---------- 宇宙ステージ ---------- */
+
+test("PC画面は宇宙の背景を読み込み、body に背景色を付けない（付けると星が隠れる）", async () => {
+  const { readFileSync } = await import("node:fs");
+  const html = readFileSync(new URL("../../static/host.html", import.meta.url), "utf8");
+  assert.ok(html.includes('href="/static/shared/space.css"'));
+  const body = html.match(/\n  body \{([^}]*)\}/)[1];
+  assert.ok(!/background/.test(body.replace(/\/\*.*?\*\//g, "")));
+  assert.ok(existsSync(new URL("../../static/shared/space.css", import.meta.url)));
+});

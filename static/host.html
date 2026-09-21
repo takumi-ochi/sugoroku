@@ -5,13 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>すごろく — 親機</title>
 <link rel="stylesheet" href="/static/shared/dice.css">
+<link rel="stylesheet" href="/static/shared/space.css">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   /* display を持つ要素にも hidden 属性を効かせる */
   [hidden] { display: none !important; }
   body {
-    margin: 0; height: 100vh; overflow: hidden; background: #0f1117; color: #eef0f5;
+    margin: 0; height: 100vh; overflow: hidden; color: #eef0f5;   /* 背景は shared/space.css（body には background を付けない） */
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Yu Gothic UI", sans-serif;
     display: flex; flex-direction: column;
   }
@@ -31,7 +32,7 @@
   #chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 900px; }
   #chips .chip {
     padding: 7px 14px; border-radius: 999px; border: 1px solid var(--c, #262a35);
-    background: #171a22; font-size: 14px; font-weight: 700; color: var(--c, #8b93a7);
+    background: rgba(23,26,34,.78); font-size: 14px; font-weight: 700; color: var(--c, #8b93a7);
   }
   #lobbyctrl { display: flex; flex-direction: column; gap: 10px; width: min(100%, 420px); }
   .lead { font-size: 13px; color: #8b93a7; letter-spacing: .08em; }
@@ -71,7 +72,8 @@
   #board { display: grid; gap: 7px; height: 100%; min-height: 0; }
   .sq {
     position: relative; border-radius: 10px; padding: 5px 6px; min-height: 0; overflow: hidden;
-    background: #171a22; border: 1px solid #262a35; display: flex; flex-direction: column;
+    background: rgba(23,26,34,.78); border: 1px solid #262a35; display: flex; flex-direction: column;
+    box-shadow: inset 0 0 14px -8px rgba(140, 170, 255, .55);
     transition: box-shadow .15s, border-color .15s;
   }
   .sq .no { font-size: 11px; color: #5c6478; font-variant-numeric: tabular-nums; }
@@ -94,19 +96,19 @@
   .tk.hop { animation: hop .18s ease; }
   @keyframes hop { 0% { transform: translateY(0) scale(1) } 50% { transform: translateY(-9px) scale(1.15) } 100% { transform: translateY(0) scale(1) } }
 
-  .sq.start   { background: #10202b; border-color: #1d4a63; }
+  .sq.start   { background: rgba(16,32,43,.78); border-color: #1d4a63; }
   .sq.start .lb { color: #4dd0e1; }
-  .sq.forward { background: #12241a; border-color: #2c5f3f; }
+  .sq.forward { background: rgba(18,36,26,.78); border-color: #2c5f3f; }
   .sq.forward .lb { color: #81c784; }
-  .sq.back    { background: #2a1d14; border-color: #6b4220; }
+  .sq.back    { background: rgba(42,29,20,.78); border-color: #6b4220; }
   .sq.back .lb { color: #ff9d5c; }
-  .sq.rest    { background: #1f1a2b; border-color: #4f3d73; }
+  .sq.rest    { background: rgba(31,26,43,.78); border-color: #4f3d73; }
   .sq.rest .lb { color: #ba8cff; }
-  .sq.gain    { background: #2b2413; border-color: #6b5a20; }
+  .sq.gain    { background: rgba(43,36,19,.78); border-color: #6b5a20; }
   .sq.gain .lb { color: #ffd54f; }
-  .sq.lose    { background: #2a1618; border-color: #6b2f33; }
+  .sq.lose    { background: rgba(42,22,24,.78); border-color: #6b2f33; }
   .sq.lose .lb { color: #ff6b7a; }
-  .sq.card    { background: #14202e; border-color: #2f5a86; }
+  .sq.card    { background: rgba(20,32,46,.78); border-color: #2f5a86; }
   .sq.card .lb { color: #79b8ff; }
   .sq.here    { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.3); }
   .sq.flash   { border-color: var(--fc, #fff); box-shadow: 0 0 22px -2px var(--fc, #fff); }
@@ -114,12 +116,12 @@
   /* ---- 右側 ---- */
   aside { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 
-  #turn { font-size: 14px; text-align: center; padding: 10px; border-radius: 10px; background: #171a22; border: 1px solid #262a35; flex: none; }
+  #turn { font-size: 14px; text-align: center; padding: 10px; border-radius: 10px; background: rgba(23,26,34,.78); border: 1px solid #262a35; flex: none; }
   #turn b { font-size: 17px; color: var(--c, #eef0f5); }
   #turn .rd { font-size: 12px; color: #8b93a7; font-variant-numeric: tabular-nums; margin-bottom: 3px; letter-spacing: .05em; }
   #turn .ex { font-size: 12px; font-weight: 700; color: #79b8ff; margin-top: 5px; }
 
-  #dice { border: 1px solid #262a35; border-radius: 14px; padding: 14px; text-align: center; background: #171a22; flex: none; }
+  #dice { border: 1px solid #262a35; border-radius: 14px; padding: 14px; text-align: center; background: rgba(23,26,34,.78); flex: none; }
   #dice .stage { --die: 104px; }
   #dicerow { display: flex; gap: 16px; align-items: center; justify-content: center; }
   #dicerow.two .stage { --die: 78px; }
@@ -132,7 +134,7 @@
   #list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; }
   .row {
     display: flex; align-items: center; gap: 10px; padding: 8px 11px;
-    border-radius: 10px; border: 1px solid #262a35; background: #171a22;
+    border-radius: 10px; border: 1px solid #262a35; background: rgba(23,26,34,.78);
   }
   .row.now { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, #171a22); }
   .row .rk { width: 30px; flex: none; font-size: 13px; font-weight: 800; color: #8b93a7; font-variant-numeric: tabular-nums; }
@@ -152,7 +154,7 @@
   #setup { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #8b93a7; flex: none; }
   #rounds {
     width: 72px; padding: 8px; font-size: 16px; font-weight: 700; text-align: center;
-    border-radius: 8px; border: 1px solid #3a4050; background: #171a22; color: #eef0f5; font-family: inherit;
+    border-radius: 8px; border: 1px solid #3a4050; background: rgba(23,26,34,.78); color: #eef0f5; font-family: inherit;
   }
   #rounds:disabled { color: #5c6478; }
 
