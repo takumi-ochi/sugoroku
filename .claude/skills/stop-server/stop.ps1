@@ -4,9 +4,13 @@
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 
+# ポートは共通側（../game_common/mobilelink/network.py）が持っている
 $port = 8000
-$m = Select-String -Path (Join-Path $root "config.py") -Pattern '^PORT\s*=\s*(\d+)' | Select-Object -First 1
-if ($m) { $port = [int]$m.Matches[0].Groups[1].Value }
+$portFile = Join-Path $root "..\game_common\mobilelink\network.py"
+if (Test-Path $portFile) {
+    $m = Select-String -Path $portFile -Pattern '^PORT\s*=\s*(\d+)' | Select-Object -First 1
+    if ($m) { $port = [int]$m.Matches[0].Groups[1].Value }
+}
 
 $listeners = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
 if (-not $listeners) {

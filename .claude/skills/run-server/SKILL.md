@@ -23,7 +23,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\.claude\skills\run-server\
 
 スクリプトがやること:
 
-- ポート（`config.py` の `PORT`）が待ち受け中なら、`/stop-server` の `stop.ps1` で止める
+- ポート（`../game_common/mobilelink/network.py` の `PORT`）が待ち受け中なら、`/stop-server` の `stop.ps1` で止める
   - それでもポートが空かなければ、このゲーム以外のプロセスが使っている。止めずに `STATUS=error` を返す
 - `.venv` がなければ作って依存をインストールする
 - `main.py` を**ウィンドウなし**で起動し、待ち受けるまで最大30秒待つ

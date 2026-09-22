@@ -21,6 +21,9 @@ PCの画面に盤面を出し、手元のスマホでサイコロを振って遊
 python -m venv .venv
 ./.venv/Scripts/python.exe -m pip install -r requirements.txt
 
+# スマホ連携（../game_common）を import できるようにする
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../game_common/install.ps1 .
+
 # スマホから繋がるようにファイアウォールを設定（管理者PowerShellが別ウィンドウで開く）
 powershell.exe -NoProfile -Command 'Start-Process powershell -Verb RunAs -ArgumentList ("-NoProfile -ExecutionPolicy Bypass -NoExit -File `"" + (Resolve-Path setup-firewall.ps1) + "`"")'
 ```
@@ -207,19 +210,16 @@ PC画面の盤は、いま手番の人がいる階層のものを出す（別の
 
 通信とゲームのルールを分けてある。ゲームを作り込むときに触るのは `game/` だけ。
 
+スマホ連携（LAN IP・QR・HTTP・WebSocket・再接続）はこのフォルダには無い。
+他のゲームと共有する [`../game_common`](../game_common/) に移してある。
+
 ```
-main.py            起動するだけ（QR表示 + uvicorn）
-config.py          ポート番号・LAN IP・参加URL
+main.py            起動するだけ（Game を共通側に渡す）
 
 game/              ゲームのルールと状態  ← ここを育てていく
   logic.py           Game クラス。手番・ターン・サイコロ・マスの効果・カード・順位
   board.py           盤面の定義（マス数と特殊マス、所持金と給料の額）
   cards.py           カードの種類と山札（枚数の上限もここ）
-  events.py          「誰に何を送るか」の表現
-
-net/               通信  ← ゲームを増やしても基本さわらない
-  server.py          HTTPとWebSocketの入り口
-  hub.py             接続の保持とイベント配信
 
 static/
   host.html          PC画面（盤面・サイコロ・参加者一覧）
@@ -238,7 +238,28 @@ static/
 tests/
   test_game.py       ゲームロジックの単体テスト（サーバー不要）
   js/shared.test.mjs 共有部品の単体テスト（ブラウザ不要）
+
+../game_common/         スマホ連携  ← ゲームを増やしても基本さわらない
+  mobilelink/
+    events.py        「誰に何を送るか」の表現
+    protocol.py      ゲーム側が満たす約束ごと（下の5つ）
+    server.py        HTTPとWebSocketの入り口
+    hub.py           接続の保持とイベント配信
+    network.py       ポート番号・LAN IP・参加URL
+    qr.py            参加用QRコード
+    launcher.py      起動とターミナル表示
+    static/conn.js   ブラウザ側の接続（切れたら繋ぎ直す）
 ```
+
+共通側がすごろくについて知っているのは、`Game` が持つ次の5つだけ。
+
+| メソッド | いつ呼ばれるか |
+|---|---|
+| `state()` | 繋いできた画面に、いまの状態をまるごと渡すとき |
+| `add_player(name)` | スマホが1台参加したとき |
+| `remove_player(id)` | 切断・退出したとき |
+| `handle(id, msg)` | スマホから1件届いたとき |
+| `handle_host(msg)` | PC画面から1件届いたとき |
 
 ### なぜ分けるか
 
@@ -252,10 +273,10 @@ tests/
 ### 流れ
 
 ```
-スマホ ──{"type":"roll"}──> net/server.py
+スマホ ──{"type":"roll"}──> game_common: server.py
                               |
                               v
-                          net/hub.py  ──> game/logic.py の handle()
+                     game_common: hub.py ──> game/logic.py の handle()
                               |                  |
                               |          [Event(...), Event(...)] を返す
                               v                  |
@@ -267,7 +288,7 @@ tests/
 ```
 
 `game/logic.py` は「誰に何を送るか」を `Event` で返すだけで、送信そのものはしない。
-`net/hub.py` がそれを受け取って実際のWebSocketに流す。
+共通側の `Hub` がそれを受け取って実際のWebSocketに流す。
 
 ### 状態の持ち方
 
@@ -360,7 +381,7 @@ to_player("p2", state + you)    # p2 へ。p2 の手札だけが入る
 ### ゲームを足すには
 
 `game/logic.py` の `handle()` に分岐を足す。状態は `Game` のフィールドに持たせる。
-`net/` は触らなくてよい。
+共通側（`../game_common`）は触らなくてよい。
 
 ```python
 if kind == "roll":
@@ -422,7 +443,7 @@ QRの表示はサーバーを通さない。`phase` が `finished` に変わっ�
 `left` / `kicked` を送ったあと、サーバーがWebSocketを閉じる。
 
 ゲームロジックは `Event(..., close=True)` で「閉じてほしい」と示すだけで、
-実際の `ws.close()` は `net/hub.py` が行う。ここでも層は分かれている。
+実際の `ws.close()` は共通側の `Hub` が行う。ここでも層は分かれている。
 
 スマホ側は、退出・キックのときだけ自動再接続を止めて名前入力画面に戻る
 （iOSの画面ロックによる切断とは区別している）。
@@ -467,6 +488,7 @@ game = Game(rng=FixedDice(1, cards=[cards.GUARD]))   # 1 が出て、おまも�
 | サイコロの動き | `shared/dice.js` |
 | 効果音 | `shared/sound.js` |
 | 移動の速さ | `shared/anim.js` |
+| 接続・再接続のしかた | `../game_common/mobilelink/static/conn.js`（両画面で共通） |
 
 位置の表示は `posLabel()`、金額は `moneyLabel()` だけが作る。PC画面の一覧もスマホの見出しも同じ関数を呼ぶので、
 文言も数字も食い違いようがない。`node --test "tests/js/*.test.mjs"` がこれを検証している。

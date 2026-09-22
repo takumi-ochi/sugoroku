@@ -9,7 +9,7 @@
 import unittest
 
 from game import board, cards
-from game.events import HOSTS
+from mobilelink import HOSTS
 from game.logic import (
     COLORS, FINISHED, PLAYING, WAITING, Game,
 )

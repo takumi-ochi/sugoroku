@@ -340,6 +340,7 @@
   <div id="sndhint" hidden>🔈 画面をタップすると音が鳴ります</div>
 
 <script type="module">
+import { createConnection } from "/common/conn.js";
 import { createDice } from "/static/shared/dice.js";
 import * as sound from "/static/shared/sound.js";
 import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
@@ -365,18 +366,18 @@ $("mute").onclick = () => { $("mute").textContent = sound.toggleMute() ? "🔇" 
 sound.armEnable((ready) => { $("sndhint").hidden = ready || sound.isMuted(); });
 
 /* ---- 状態 ---- */
-let ws = null, myName = "", myId = null, joined = false, retry = null;
+let myName = "", myId = null;
 let state = null, lastSeq = null, lastClimb = null, firstState = true;
 let picked = null;   // 説明を開いているカードの uid
 
 function setStatus(text, s) { $("status").textContent = text; $("dot").className = s || ""; }
 
 function showEntry(message) {
-  joined = false; myId = null; state = null; lastSeq = null; lastClimb = null; firstState = true; picked = null;
+  myId = null; state = null; lastSeq = null; lastClimb = null; firstState = true; picked = null;
   $("sheet").hidden = true;
   $("rules").hidden = true;
   $("rulesbtn").hidden = true;
-  clearTimeout(retry);
+  conn.stop();          // キックされた後に勝手に入り直さないように
   $("game").style.display = "none";
   $("dicebox").hidden = true;
   $("entry").style.display = "flex";
@@ -682,23 +683,21 @@ async function apply(s) {
 
 const queue = createQueue(apply);
 
-/* ---- 接続 ---- */
-function connect() {
-  clearTimeout(retry);
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(`${proto}//${location.host}/ws/player?name=${encodeURIComponent(myName)}`);
+/* ---- 接続 ----
+ * 繋ぎ直し（切断時・ロック解除時）は /common/conn.js がやる。ここはゲームの話だけ。
+ * なまえは参加ボタンを押すまで決まらないので、params は関数で渡す。
+ */
+const conn = createConnection("/ws/player", {
+  params: () => ({ name: myName }),
 
-  ws.onopen = () => setStatus("接続中", "on");
-  ws.onclose = () => {
-    if (!joined) { setStatus("退出しました"); return; }   // 自分で抜けた/キックされた
-    setStatus("切断 — 再接続します…", "off");
-    // iOSは画面ロックやアプリ切替でWebSocketを切る。黙って繋ぎ直す。
-    retry = setTimeout(connect, 1000);
-  };
-  ws.onerror = () => ws.close();
+  onOpen: () => setStatus("接続中", "on"),
 
-  ws.onmessage = (ev) => {
-    const msg = JSON.parse(ev.data);
+  onClose: (繋ぎ直す) => {
+    setStatus(繋ぎ直す ? "切断 — 再接続します…" : "退出しました",
+              繋ぎ直す ? "off" : "");
+  },
+
+  onMessage: (msg) => {
     if (msg.type === "joined") {
       myId = msg.you.id;
       firstState = true;          // 繋ぎ直しの直後は演出せず、いまの状態を描く
@@ -715,18 +714,17 @@ function connect() {
     } else if (msg.type === "kicked") {
       showEntry("PC画面から切断されました。");
     }
-  };
-}
+  },
+});
 
 $("join").onclick = () => {
   sound.enable();              // このタップで音を有効化する
   myName = $("name").value.trim();
-  joined = true;
   $("notice").style.display = "none";
-  connect();
+  conn.open();
 };
 
-function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
+const send = (msg) => conn.send(msg);
 
 $("roll").onclick = () => {
   sound.enable();
@@ -792,19 +790,11 @@ $("gameend").onclick = () => {
 };
 
 $("leave").onclick = () => {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "leave" }));   // サーバーが "left" を返して閉じる
-  } else {
-    showEntry("退出しました。もう一度参加できます。");
-    if (ws) ws.close();
-  }
-  joined = false;   // 自動再接続を止める
+  // 繋がっていればサーバーが "left" を返して閉じてくれる。
+  // 切れている間に押されたときは、その場で入口に戻す。
+  if (!conn.send({ type: "leave" })) showEntry("退出しました。もう一度参加できます。");
+  conn.stop();      // 自動再接続を止める（サーバーからの "left" を待たずに）
 };
-
-// ロック解除やタブ復帰で即座に繋ぎ直す（タイマー待ちを飛ばす）
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && joined && (!ws || ws.readyState > WebSocket.OPEN)) connect();
-});
 
 setStatus("なまえを入れてください");
 </script>

@@ -266,6 +266,7 @@
   </div>
 
 <script type="module">
+import { createConnection } from "/common/conn.js";
 import { createDice } from "/static/shared/dice.js";
 import * as sound from "/static/shared/sound.js";
 import { sleep, walk, createQueue, RESULT_MS, EFFECT_MS } from "/static/shared/anim.js";
@@ -312,9 +313,9 @@ $("mute").onclick = () => { $("mute").textContent = sound.toggleMute() ? "🔇" 
 sound.armEnable((ready) => { $("sndhint").hidden = ready || sound.isMuted(); });
 
 /* ---- 盤面 ---- */
-let ws = null, state = null, shown = new Map(), lastSeq = null, lastClimb = null, firstState = true, animating = false;
+let state = null, shown = new Map(), lastSeq = null, lastClimb = null, firstState = true, animating = false;
 
-function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
+const send = (msg) => conn.send(msg);
 
 // マスを外周に輪として並べ、内側に手番とサイコロ（#center）を置く。
 // 盤は階層ごとに違う。いま盤に出している階層（0 = まだ描いていない）。
@@ -665,22 +666,23 @@ $("qrclose").onclick = () => showQR(false);
 $("qrmodal").onclick = (e) => { if (e.target !== $("qrbig")) showQR(false); };
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") showQR(false); });
 
-function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws/host`);
+/* ---- 接続 ----
+ * 繋ぎ直しは /common/conn.js がやる。PC画面は自分から抜けることが無いので、
+ * 切れたらサーバーが戻ってくるまでずっと繋ぎ直し続ける。
+ */
+const conn = createConnection("/ws/host", {
   // 文言は左バー（幅76px）にも収まる長さにしてある
-  ws.onopen = () => { $("dot").className = "on"; $("cs").textContent = "接続OK"; };
-  ws.onclose = () => {
-    $("dot").className = ""; $("cs").textContent = "切断・再接続中";
-    setTimeout(connect, 1000);
-  };
-  ws.onmessage = (ev) => {
-    const msg = JSON.parse(ev.data);
+  onOpen: () => { $("dot").className = "on"; $("cs").textContent = "接続OK"; },
+  onClose: () => { $("dot").className = ""; $("cs").textContent = "切断・再接続中"; },
+
+  onMessage: (msg) => {
+    // 参加用URLはサーバーが教えてくれる（LAN IPを知っているのは親機だけ）
     if (msg.type === "welcome") $("qrurl").textContent = $("lobbyurl").textContent = msg.join_url;
     else if (msg.type === "state") queue.push(msg);
-  };
-}
+  },
+});
 
-connect();
+conn.open();
 </script>
 </body>
 </html>

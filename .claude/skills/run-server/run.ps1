@@ -10,16 +10,20 @@ $python = Join-Path $root ".venv\Scripts\python.exe"
 $stop = Join-Path $PSScriptRoot "..\stop-server\stop.ps1"
 $log = Join-Path $env:TEMP "sugoroku-server.log"
 
+# ポートは共通側（../game_common/mobilelink/network.py）が持っている
 $port = 8000
-$m = Select-String -Path (Join-Path $root "config.py") -Pattern '^PORT\s*=\s*(\d+)' | Select-Object -First 1
-if ($m) { $port = [int]$m.Matches[0].Groups[1].Value }
+$portFile = Join-Path $root "..\game_common\mobilelink\network.py"
+if (Test-Path $portFile) {
+    $m = Select-String -Path $portFile -Pattern '^PORT\s*=\s*(\d+)' | Select-Object -First 1
+    if ($m) { $port = [int]$m.Matches[0].Groups[1].Value }
+}
 
 function Test-Listening {
     $null -ne (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
 }
 
 function Get-LanIp {
-    # Same trick as config.py: ask the OS which local address routes outward.
+    # Same trick as game_common/mobilelink/network.py: ask the OS which address routes outward.
     $sock = New-Object System.Net.Sockets.Socket([System.Net.Sockets.AddressFamily]::InterNetwork, [System.Net.Sockets.SocketType]::Dgram, [System.Net.Sockets.ProtocolType]::Udp)
     try { $sock.Connect("8.8.8.8", 80); $sock.LocalEndPoint.Address.ToString() }
     catch { "127.0.0.1" }
@@ -51,6 +55,8 @@ if (-not (Test-Path $python)) {
     try {
         python -m venv .venv
         & $python -m pip install --disable-pip-version-check -q -r requirements.txt
+        # game_common の mobilelink を import できるようにする（.pth を置くだけ）
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "..\game_common\install.ps1") $root | Out-Null
     } finally { Pop-Location }
 }
 

@@ -26,7 +26,7 @@ import random
 from dataclasses import dataclass, field
 
 from . import board, cards
-from .events import Event, to_hosts, to_player
+from mobilelink import Event, to_hosts, to_player
 
 # 参加者に順番に割り当てる色
 COLORS = ["#ff5c7c", "#4dd0e1", "#ffd54f", "#81c784", "#ba8cff", "#ff9d5c"]
